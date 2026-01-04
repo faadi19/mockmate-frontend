@@ -1,0 +1,126 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+
+:root {
+  /* Light theme (formal, neutral) */
+  --background: 248 250 252; /* slate-50 */
+  --card: 255 255 255; /* white */
+  --border: 226 232 240; /* slate-200 */
+
+  --text-primary: 15 23 42; /* slate-900 */
+  --text-secondary: 71 85 105; /* slate-600 */
+
+  /* Brand accent (professional blue + teal) */
+  --primary: 29 78 216; /* blue-700 */
+  --secondary: 15 118 110; /* teal-700 */
+
+  --success: 16 185 129; /* emerald-500 */
+  --warning: 245 158 11; /* amber-500 */
+  --error: 239 68 68; /* red-500 */
+}
+
+/* Dark theme overrides */
+html[data-theme="dark"] {
+  --background: 11 18 32; /* deep navy */
+  --card: 17 27 46; /* slate-ish surface */
+  --border: 36 50 74;
+
+  --text-primary: 226 232 240; /* slate-200 */
+  --text-secondary: 148 163 184; /* slate-400 */
+
+  --primary: 59 130 246; /* blue-500 */
+  --secondary: 20 184 166; /* teal-500 */
+}
+
+*{
+  scroll-behavior: smooth;
+}
+
+@layer base {
+  html {
+    @apply antialiased;
+  }
+  
+  body {
+    @apply bg-background text-text-primary overflow-x-hidden;
+  }
+  
+  /* Custom scrollbar */
+  ::-webkit-scrollbar {
+    width: 10px;
+  }
+  
+  ::-webkit-scrollbar-track {
+    @apply bg-background;
+  }
+  
+  ::-webkit-scrollbar-thumb {
+    @apply bg-primary/25 rounded-full;
+  }
+  
+  ::-webkit-scrollbar-thumb:hover {
+    @apply bg-primary/35;
+  }
+}
+
+/* Global animations */
+@layer utilities {
+  .animate-glow {
+    animation: glow 2s ease-in-out infinite alternate;
+  }
+  
+  @keyframes glow {
+    from {
+      box-shadow: 0 0 10px -10px rgb(var(--primary) / 0.35);
+    }
+    to {
+      box-shadow: 0 0 20px 0px rgb(var(--primary) / 0.55);
+    }
+  }
+  
+  .gradient-text {
+    @apply bg-clip-text text-transparent bg-gradient-to-r from-primary to-secondary;
+  }
+  
+  .gradient-border {
+    position: relative;
+  }
+  
+  .gradient-border::before {
+    content: "";
+    position: absolute;
+    inset: 0;
+    border-radius: 0.5rem;
+    padding: 2px;
+    background: linear-gradient(to right, rgb(var(--primary)), rgb(var(--secondary)));
+    -webkit-mask: 
+      linear-gradient(#fff 0 0) content-box, 
+      linear-gradient(#fff 0 0);
+    -webkit-mask-composite: xor;
+    mask-composite: exclude;
+    pointer-events: none;
+  }
+}
+
+.custom-shadow{
+  /* Subtle brand-tinted glow (works in both light/dark) */
+  box-shadow:
+    0 0 90px rgb(var(--primary) / 0.20) inset,
+    0 0 70px rgb(var(--secondary) / 0.14) inset,
+    0 12px 40px rgb(0 0 0 / 0.15);
+}
+
+.scrollbar-hide::-webkit-scrollbar {
+  display: none;
+}
+
+.scrollbar-hide {
+  -ms-overflow-style: none;
+  scrollbar-width: none;
+}
+
+.shadow-full-white{
+  box-shadow: 0 0 20px rgba(255, 255, 255, 0.8)
+}

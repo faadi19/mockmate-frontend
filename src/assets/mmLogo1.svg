@@ -1,0 +1,29 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" fill="none">
+  <defs>
+    <linearGradient id="mmg" x1="120" y1="92" x2="420" y2="420" gradientUnits="userSpaceOnUse">
+      <stop offset="0" stop-color="#3b82f6"/>
+      <stop offset="1" stop-color="#1d4ed8"/>
+    </linearGradient>
+  </defs>
+
+  <!-- Outer chat bubble (with tail) -->
+  <path
+    d="M206 396h-18c-40 0-72-32-72-72V160c0-56 44-100 100-100h136c56 0 100 44 100 100v136c0 56-44 100-100 100H248l-82 74 20-74z"
+    stroke="url(#mmg)"
+    stroke-width="28"
+    stroke-linecap="round"
+    stroke-linejoin="round"
+  />
+
+  <!-- Inner pill -->
+  <rect
+    x="158"
+    y="198"
+    width="296"
+    height="132"
+    rx="66"
+    stroke="url(#mmg)"
+    stroke-width="28"
+  />
+</svg>
+

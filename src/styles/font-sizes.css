@@ -1,0 +1,184 @@
+/* ===================================
+   FONT SIZE SYSTEM (9px to 56px)
+   Properly Responsive with clamp()
+   Max = Class name, Min = 3px less
+   =================================== */
+
+.font-size-9px {
+  font-size: clamp(6px, 0.469vw, 9px);
+}
+
+.font-size-10px {
+  font-size: clamp(7px, 0.521vw, 10px);
+}
+
+.font-size-11px {
+  font-size: clamp(7px, 0.573vw, 11px);
+}
+
+.font-size-12px {
+  font-size: clamp(9px, 0.625vw, 12px);
+}
+
+.font-size-13px {
+  font-size: clamp(10px, 0.677vw, 13px);
+}
+
+.font-size-14px {
+  font-size: clamp(11px, 0.729vw, 14px);
+}
+
+.font-size-15px {
+  font-size: clamp(11px, 0.781vw, 15px);
+}
+
+.font-size-16px {
+  font-size: clamp(11px, 0.833vw, 16px);
+}
+
+.font-size-17px {
+  font-size: clamp(12px, 0.885vw, 17px);
+}
+
+.font-size-18px {
+  font-size: clamp(12px, 0.938vw, 18px);
+}
+
+.font-size-19px {
+  font-size: clamp(14px, 0.99vw, 19px);
+}
+
+.font-size-20px {
+  font-size: clamp(14px, 1.042vw, 20px);
+}
+
+.font-size-21px {
+  font-size: clamp(14px, 1.094vw, 21px);
+}
+
+.font-size-22px {
+  font-size: clamp(15px, 1.146vw, 22px);
+}
+
+.font-size-23px {
+  font-size: clamp(20px, 16.8px + 1vw, 23px);
+}
+
+.font-size-24px {
+  font-size: clamp(17px, 1.25vw, 24px);
+}
+
+.font-size-25px {
+  font-size: clamp(18px, 1.302vw, 25px);
+}
+
+.font-size-26px {
+  font-size: 1.354vw;
+  @media (max-width: 1024px) {
+    font-size: clamp(15px, 0.95vw, 26px);
+  }
+}
+
+.font-size-27px {
+  font-size: clamp(18px, 1.406vw, 27px);
+}
+
+.font-size-28px {
+  font-size: clamp(19px, 1.458vw, 28px);
+  /* 25px → 28px */
+}
+
+.font-size-29px {
+  font-size: clamp(26px, 21.6px + 1.375vw, 29px);
+  /* 26px → 29px */
+}
+
+.font-size-30px {
+  font-size: clamp(20px, 1.563vw, 30px);
+  /* 27px → 30px */
+}
+
+.font-size-31px {
+  font-size: clamp(23px, 1.615vw, 31px);
+  /* 27px → 30px */
+}
+
+.font-size-32px {
+  font-size: clamp(24px, 1.667vw, 32px);
+  /* 29px → 32px */
+}
+
+.font-size-34px {
+  font-size: clamp(31px, 25.6px + 1.69vw, 34px);
+  /* 31px → 34px */
+}
+
+.font-size-35px {
+  font-size: clamp(25px, 1.823vw, 35px);
+}
+
+.font-size-36px {
+  font-size: clamp(33px, 27.2px + 1.81vw, 36px);
+  /* 33px → 36px */
+}
+
+.font-size-38px {
+  font-size: clamp(35px, 28.8px + 1.94vw, 38px);
+  /* 35px → 38px */
+}
+
+.font-size-40px {
+  font-size: clamp(28px, 2.083vw, 40px);
+  /* 37px → 40px */
+}
+
+.font-size-42px {
+  font-size: clamp(39px, 32px + 2.19vw, 42px);
+  /* 39px → 42px */
+}
+
+.font-size-44px {
+  font-size: clamp(41px, 33.6px + 2.31vw, 44px);
+  /* 41px → 44px */
+}
+
+.font-size-46px {
+  font-size: clamp(43px, 35.2px + 2.44vw, 46px);
+  /* 43px → 46px */
+}
+
+.font-size-48px {
+  font-size: clamp(45px, 36.8px + 2.56vw, 48px);
+  /* 45px → 48px */
+}
+
+.font-size-50px {
+  font-size: clamp(42px, 2.69vw, 50px);
+  /* 47px → 50px */
+}
+
+.font-size-52px {
+  font-size: clamp(30px, 2.69vw, 52px);
+  /* 42px → 52px */
+}
+
+.font-size-54px {
+  font-size: clamp(51px, 3.1vw, 54px);
+}
+
+.font-size-55px {
+  font-size: clamp(38px, 2.865vw, 55px);
+}
+
+.font-size-56px {
+  font-size: clamp(40px, 2.917vw, 56px);
+}
+
+.font-size-62px {
+  font-size: clamp(40px, 3.229vw, 62px);
+}
+
+.font-size-63px {
+  font-size: clamp(40px, 3.281vw, 63px);
+}
+
