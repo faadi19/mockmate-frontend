@@ -1,5 +1,6 @@
 import { useState, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
+import { API_BASE_URL } from "../config/api";
 import { ArrowRight } from "lucide-react";
 import { motion, useReducedMotion } from "framer-motion";
 import AppLayout from "../components/layout/AppLayout";
@@ -86,8 +87,8 @@ const InterviewSetupPage = () => {
         setLoadingJD(true);
         // Send role AS-IS (no normalization)
         const roleValue = role.trim();
-        
-        const res = await fetch(`http://localhost:5000/api/roles/${encodeURIComponent(roleValue)}/jd`, {
+
+        const res = await fetch(`${API_BASE_URL}/api/roles/${encodeURIComponent(roleValue)}/jd`, {
           method: "GET",
           headers: {
             "Content-Type": "application/json",
@@ -96,10 +97,10 @@ const InterviewSetupPage = () => {
 
         if (res.ok) {
           const data = await res.json();
-          
+
           // Debug: Log the response
           console.log("JD API Response:", data);
-          
+
           // Check backend response for validRole
           if (data.success && data.validRole === true) {
             setIsValidRole(true);
@@ -173,7 +174,7 @@ const InterviewSetupPage = () => {
 
       console.log("Sending setup request:", payload);
 
-      const res = await fetch("http://localhost:5000/api/interview/setup", {
+      const res = await fetch(`${API_BASE_URL}/api/interview/setup`, {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
@@ -208,9 +209,9 @@ const InterviewSetupPage = () => {
         console.error("Error parsing response:", parseError);
         throw new Error("Invalid response from server");
       });
-      
+
       console.log("Setup response:", created);
-      
+
       const createdSetupId = created?.setup?._id || created?._id || created?.id;
       if (!createdSetupId) {
         throw new Error("Setup created but no setup id returned from server.");
@@ -256,7 +257,7 @@ const InterviewSetupPage = () => {
       localStorage.removeItem("interviewCompleted");
 
       // start interview session using the setup id
-      const startRes = await fetch("http://localhost:5000/api/interview/start", {
+      const startRes = await fetch(`${API_BASE_URL}/api/interview/start`, {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
@@ -301,77 +302,77 @@ const InterviewSetupPage = () => {
           />
 
           <div className="flex flex-col gap-6 lg:gap-[1.5vw] max-w-3xl mx-auto w-full px-4 sm:px-0">
-          {/* Invalid Role Message */}
-          {!loadingJD && isValidRole === false && (
-            <Card className="bg-warning/10 border border-warning/30 rounded-lg">
-              <CardContent className="p-6">
-                <p className="text-warning text-center">
-                  This role does not exist or is not recognized.
-                </p>
-              </CardContent>
-            </Card>
-          )}
+            {/* Invalid Role Message */}
+            {!loadingJD && isValidRole === false && (
+              <Card className="bg-warning/10 border border-warning/30 rounded-lg">
+                <CardContent className="p-6">
+                  <p className="text-warning text-center">
+                    This role does not exist or is not recognized.
+                  </p>
+                </CardContent>
+              </Card>
+            )}
 
-          {/* Job Description Card - Show when loading, when validRole === true, or when JD exists */}
-          {(loadingJD || isValidRole === true || (jobDescription.length > 0 && isValidRole !== false)) && (
-            <Card className="bg-background/60 border border-border rounded-lg">
-              <CardContent className="p-6">
-                {loadingJD ? (
-                  <div className="flex items-center justify-center py-8">
-                    <div className="w-full max-w-xl">
-                      <div className="h-4 w-2/3 bg-border/60 rounded mb-3 animate-pulse" />
-                      <div className="h-3 w-full bg-border/50 rounded mb-2 animate-pulse" />
-                      <div className="h-3 w-11/12 bg-border/50 rounded mb-2 animate-pulse" />
-                      <div className="h-3 w-10/12 bg-border/50 rounded animate-pulse" />
+            {/* Job Description Card - Show when loading, when validRole === true, or when JD exists */}
+            {(loadingJD || isValidRole === true || (jobDescription.length > 0 && isValidRole !== false)) && (
+              <Card className="bg-background/60 border border-border rounded-lg">
+                <CardContent className="p-6">
+                  {loadingJD ? (
+                    <div className="flex items-center justify-center py-8">
+                      <div className="w-full max-w-xl">
+                        <div className="h-4 w-2/3 bg-border/60 rounded mb-3 animate-pulse" />
+                        <div className="h-3 w-full bg-border/50 rounded mb-2 animate-pulse" />
+                        <div className="h-3 w-11/12 bg-border/50 rounded mb-2 animate-pulse" />
+                        <div className="h-3 w-10/12 bg-border/50 rounded animate-pulse" />
+                      </div>
                     </div>
-                  </div>
-                ) : jobDescription.length > 0 ? (
-                  <div>
-                    <h3 className="text-lg font-semibold text-text-primary mb-4">
-                      This interview will be based on the following job description
-                    </h3>
-                    <ul className="space-y-3 text-text-secondary">
-                      {jobDescription.map((jd, idx) => (
-                        <li key={idx} className="flex items-start">
-                          <span className="mr-3 text-primary mt-1">•</span>
-                          <span className="flex-1">{jd}</span>
-                        </li>
-                      ))}
-                    </ul>
-                  </div>
-                ) : (
-                  <div>
-                    <h3 className="text-lg font-semibold text-text-primary mb-4">
-                      This interview will be based on the following job description
-                    </h3>
-                    <p className="text-text-secondary">Job description not available for this role.</p>
-                  </div>
-                )}
-              </CardContent>
-            </Card>
-          )}
+                  ) : jobDescription.length > 0 ? (
+                    <div>
+                      <h3 className="text-lg font-semibold text-text-primary mb-4">
+                        This interview will be based on the following job description
+                      </h3>
+                      <ul className="space-y-3 text-text-secondary">
+                        {jobDescription.map((jd, idx) => (
+                          <li key={idx} className="flex items-start">
+                            <span className="mr-3 text-primary mt-1">•</span>
+                            <span className="flex-1">{jd}</span>
+                          </li>
+                        ))}
+                      </ul>
+                    </div>
+                  ) : (
+                    <div>
+                      <h3 className="text-lg font-semibold text-text-primary mb-4">
+                        This interview will be based on the following job description
+                      </h3>
+                      <p className="text-text-secondary">Job description not available for this role.</p>
+                    </div>
+                  )}
+                </CardContent>
+              </Card>
+            )}
 
-          {error && (
-            <p className="text-sm text-red-400">{error}</p>
-          )}
+            {error && (
+              <p className="text-sm text-red-400">{error}</p>
+            )}
 
-          {/* Start Interview Button */}
-          <Button
-            onClick={handleStartInterview}
-            className="w-full flex items-center justify-center gap-2"
-            disabled={loading}
-            loading={loading}
-            icons={
-              !loading ? (
-                <ArrowRight className="size-5 lg:size-[1.5vw] text-text-secondary" />
-              ) : undefined
-            }
-            iconsPosition="right"
-            rounded
-            size="lg"
-          >
-            {loading ? "Starting Interview..." : "Start Interview"}
-          </Button>
+            {/* Start Interview Button */}
+            <Button
+              onClick={handleStartInterview}
+              className="w-full flex items-center justify-center gap-2"
+              disabled={loading}
+              loading={loading}
+              icons={
+                !loading ? (
+                  <ArrowRight className="size-5 lg:size-[1.5vw] text-text-secondary" />
+                ) : undefined
+              }
+              iconsPosition="right"
+              rounded
+              size="lg"
+            >
+              {loading ? "Starting Interview..." : "Start Interview"}
+            </Button>
           </div>
         </AnimatedPage>
       </AppLayout>
@@ -394,120 +395,120 @@ const InterviewSetupPage = () => {
           transition={{ duration: 0.45, ease: "easeOut" }}
           className="flex flex-col gap-6 lg:gap-[1.5vw] max-w-full"
         >
-        <motion.div
-          initial={reduceMotion ? false : { opacity: 0, y: 10 }}
-          animate={reduceMotion ? undefined : { opacity: 1, y: 0 }}
-          transition={{ duration: 0.4, delay: 0.02, ease: "easeOut" }}
-        >
-          <InputField
-          label="Desired Role"
-          labelIcon={
-            <img
-              src={ImagesPath.roleIcon}
-              alt="role"
-              className="w-[90%] object-contain"
+          <motion.div
+            initial={reduceMotion ? false : { opacity: 0, y: 10 }}
+            animate={reduceMotion ? undefined : { opacity: 1, y: 0 }}
+            transition={{ duration: 0.4, delay: 0.02, ease: "easeOut" }}
+          >
+            <InputField
+              label="Desired Role"
+              labelIcon={
+                <img
+                  src={ImagesPath.roleIcon}
+                  alt="role"
+                  className="w-[90%] object-contain"
+                />
+              }
+              type="text"
+              placeholder="e.g. Front End Developer"
+              value={role}
+              onChange={(e) => setRole(e.target.value)}
             />
-          }
-          type="text"
-          placeholder="e.g. Front End Developer"
-          value={role}
-          onChange={(e) => setRole(e.target.value)}
-        />
-        </motion.div>
+          </motion.div>
 
-        <motion.div
-          initial={reduceMotion ? false : { opacity: 0, y: 10 }}
-          animate={reduceMotion ? undefined : { opacity: 1, y: 0 }}
-          transition={{ duration: 0.4, delay: 0.06, ease: "easeOut" }}
-        >
-          <InputField
-          label="Industry"
-          labelIcon={
-            <img
-              src={ImagesPath.industryIcon}
-              alt="industry"
-              className="w-[90%] object-contain"
+          <motion.div
+            initial={reduceMotion ? false : { opacity: 0, y: 10 }}
+            animate={reduceMotion ? undefined : { opacity: 1, y: 0 }}
+            transition={{ duration: 0.4, delay: 0.06, ease: "easeOut" }}
+          >
+            <InputField
+              label="Industry"
+              labelIcon={
+                <img
+                  src={ImagesPath.industryIcon}
+                  alt="industry"
+                  className="w-[90%] object-contain"
+                />
+              }
+              type="text"
+              placeholder="e.g. Technology"
+              value={industry}
+              onChange={(e) => setIndustry(e.target.value)}
             />
-          }
-          type="text"
-          placeholder="e.g. Technology"
-          value={industry}
-          onChange={(e) => setIndustry(e.target.value)}
-        />
-        </motion.div>
+          </motion.div>
 
-        <motion.div
-          initial={reduceMotion ? false : { opacity: 0, y: 10 }}
-          animate={reduceMotion ? undefined : { opacity: 1, y: 0 }}
-          transition={{ duration: 0.4, delay: 0.1, ease: "easeOut" }}
-        >
-          <CustomDropdown
-          label="Education Level"
-          labelIcon={
-            <img
-              src={ImagesPath.educationIcon}
-              alt="education"
-              className="w-[90%] object-contain"
+          <motion.div
+            initial={reduceMotion ? false : { opacity: 0, y: 10 }}
+            animate={reduceMotion ? undefined : { opacity: 1, y: 0 }}
+            transition={{ duration: 0.4, delay: 0.1, ease: "easeOut" }}
+          >
+            <CustomDropdown
+              label="Education Level"
+              labelIcon={
+                <img
+                  src={ImagesPath.educationIcon}
+                  alt="education"
+                  className="w-[90%] object-contain"
+                />
+              }
+              options={educationOptions}
+              value={educationLevel ? [educationLevel] : []}
+              onOptionChange={(options) => setEducationLevel(options[0])}
+              dropdownPosition="top"
             />
-          }
-          options={educationOptions}
-          value={educationLevel ? [educationLevel] : []}
-          onOptionChange={(options) => setEducationLevel(options[0])}
-          dropdownPosition="top"
-        />
-        </motion.div>
+          </motion.div>
 
-        <motion.div
-          initial={reduceMotion ? false : { opacity: 0, y: 10 }}
-          animate={reduceMotion ? undefined : { opacity: 1, y: 0 }}
-          transition={{ duration: 0.4, delay: 0.14, ease: "easeOut" }}
-        >
-          <CustomDropdown
-          label="Experience Level"
-          labelIcon={
-            <img
-              src={ImagesPath.clockIcon}
-              alt="education"
-              className="w-[90%] object-contain"
+          <motion.div
+            initial={reduceMotion ? false : { opacity: 0, y: 10 }}
+            animate={reduceMotion ? undefined : { opacity: 1, y: 0 }}
+            transition={{ duration: 0.4, delay: 0.14, ease: "easeOut" }}
+          >
+            <CustomDropdown
+              label="Experience Level"
+              labelIcon={
+                <img
+                  src={ImagesPath.clockIcon}
+                  alt="education"
+                  className="w-[90%] object-contain"
+                />
+              }
+              options={experienceLevelOptions}
+              value={experienceLevel ? [experienceLevel] : []}
+              onOptionChange={(options) => setExperienceLevel(options[0])}
+              dropdownPosition="top"
             />
-          }
-          options={experienceLevelOptions}
-          value={experienceLevel ? [experienceLevel] : []}
-          onOptionChange={(options) => setExperienceLevel(options[0])}
-          dropdownPosition="top"
-        />
-        </motion.div>
+          </motion.div>
 
-        {error && (
-          <p className="text-sm text-red-400">{error}</p>
-        )}
+          {error && (
+            <p className="text-sm text-red-400">{error}</p>
+          )}
 
-        <Button
-          onClick={handleContinue}
-          className="w-full flex items-center justify-center gap-2"
-          disabled={
-            !role || !industry || !educationLevel || !experienceLevel || loading
-          }
-          loading={loading}
-          icons={
-            !loading ? (
-              <ArrowRight className="size-5 lg:size-[1.5vw] text-text-secondary" />
-            ) : undefined
-          }
-          iconsPosition="right"
-          rounded
-          size="lg"
-        >
-          {loading ? "Processing..." : "Continue"}
-        </Button>
-        
-        {loading && (
-          <div className="flex flex-col items-center justify-center py-4">
-            <p className="text-sm text-text-secondary text-center">
-              Setting up your personalized interview session...
-            </p>
-          </div>
-        )}
+          <Button
+            onClick={handleContinue}
+            className="w-full flex items-center justify-center gap-2"
+            disabled={
+              !role || !industry || !educationLevel || !experienceLevel || loading
+            }
+            loading={loading}
+            icons={
+              !loading ? (
+                <ArrowRight className="size-5 lg:size-[1.5vw] text-text-secondary" />
+              ) : undefined
+            }
+            iconsPosition="right"
+            rounded
+            size="lg"
+          >
+            {loading ? "Processing..." : "Continue"}
+          </Button>
+
+          {loading && (
+            <div className="flex flex-col items-center justify-center py-4">
+              <p className="text-sm text-text-secondary text-center">
+                Setting up your personalized interview session...
+              </p>
+            </div>
+          )}
         </motion.div>
       </AnimatedPage>
     </AppLayout>

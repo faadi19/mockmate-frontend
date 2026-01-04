@@ -14,6 +14,7 @@ import { ImagesPath } from "../utils/images";
 import { useEffect, useRef, useState } from "react";
 import ConfirmationModal from "../components/ui/ConfirmationModal";
 import axios from "axios";
+import { API_BASE_URL } from "../config/api";
 import { useAuth } from "../contexts/AuthContext";
 import { motion, useReducedMotion } from "framer-motion";
 import AnimatedPage from "../components/ui/AnimatedPage";
@@ -135,7 +136,7 @@ const ProfileSettingsComponent = ({
   const updateName = async (newName: string) => {
     setLoadingName(true);
     await axios.put(
-      "http://localhost:5000/api/profile/update",
+      `${API_BASE_URL}/api/profile/update`,
       { name: newName },
       { headers: { Authorization: `Bearer ${token}` } }
     );
@@ -147,7 +148,7 @@ const ProfileSettingsComponent = ({
   const updateEmail = async (newEmail: string) => {
     setLoadingEmail(true);
     await axios.put(
-      "http://localhost:5000/api/profile/update",
+      `${API_BASE_URL}/api/profile/update`,
       { email: newEmail },
       { headers: { Authorization: `Bearer ${token}` } }
     );
@@ -201,7 +202,7 @@ const PasswordSecurityComponent = () => {
       setLoading(true);
 
       const res = await axios.put(
-        "http://localhost:5000/api/profile/update-password",
+        `${API_BASE_URL}/api/profile/update-password`,
         {
           oldPassword,
           newPassword,
@@ -380,11 +381,10 @@ const ProfileSettingsPage = () => {
                 }}
                 whileHover={reduceMotion ? undefined : tab.onClick ? { y: -3 } : undefined}
                 transition={{ type: "spring", stiffness: 240, damping: 18 }}
-                className={`bg-card border border-border p-4 rounded-md ${
-                  tab.onClick
+                className={`bg-card border border-border p-4 rounded-md ${tab.onClick
                     ? "cursor-pointer hover:bg-primary/5"
                     : ""
-                } transition-colors duration-200`}
+                  } transition-colors duration-200`}
                 onClick={tab.onClick}
               >
                 <div className="flex justify-between items-center">
@@ -400,16 +400,16 @@ const ProfileSettingsPage = () => {
           </motion.div>
         </div>
 
-      <ConfirmationModal
-        isOpen={showLogoutModal}
-        onClose={() => setShowLogoutModal(false)}
-        onConfirm={logout}
-        title="Confirm Logout"
-        message="Are you sure you want to log out?"
-        confirmText="Log Out"
-        cancelText="Cancel"
-        confirmColor="#f6616a"
-      />
+        <ConfirmationModal
+          isOpen={showLogoutModal}
+          onClose={() => setShowLogoutModal(false)}
+          onConfirm={logout}
+          title="Confirm Logout"
+          message="Are you sure you want to log out?"
+          confirmText="Log Out"
+          cancelText="Cancel"
+          confirmColor="#f6616a"
+        />
       </AnimatedPage>
     </AppLayout>
   );

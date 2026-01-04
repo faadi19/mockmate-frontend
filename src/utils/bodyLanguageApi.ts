@@ -1,8 +1,4 @@
-/**
- * API helper for saving body language analysis data to backend
- */
-
-const API_BASE_URL = "http://localhost:5000";
+import { API_BASE_URL } from '../config/api';
 
 export interface BodyLanguageData {
   sessionId: string;
@@ -26,13 +22,13 @@ export interface BodyLanguageData {
  */
 function mapExpressionToBackend(expression: string | null): string {
   if (!expression) return 'neutral';
-  
+
   const mapping: Record<string, string> = {
     'confident': 'happy',      // Confident → happy (positive emotion)
     'nervous': 'nervous',      // Nervous → nervous (same)
     'distracted': 'sad',       // Distracted → sad (negative emotion)
   };
-  
+
   return mapping[expression.toLowerCase()] || 'neutral';
 }
 
@@ -44,7 +40,7 @@ export async function saveBodyLanguageData(
   data: BodyLanguageData
 ): Promise<void> {
   const token = localStorage.getItem("token");
-  
+
   if (!token) {
     console.warn("⚠️ No auth token found, skipping body language save");
     return;
@@ -55,11 +51,11 @@ export async function saveBodyLanguageData(
     const backendData = {
       ...data,
       expression: mapExpressionToBackend(data.expression),
-      dominantExpression: data.dominantExpression 
-        ? mapExpressionToBackend(data.dominantExpression) 
+      dominantExpression: data.dominantExpression
+        ? mapExpressionToBackend(data.dominantExpression)
         : undefined,
     };
-    
+
     const response = await fetch(`${API_BASE_URL}/api/interview/body-language`, {
       method: "POST",
       headers: {
@@ -90,7 +86,7 @@ export async function getBodyLanguageData(
   sessionId: string
 ): Promise<BodyLanguageData | null> {
   const token = localStorage.getItem("token");
-  
+
   if (!token) {
     console.warn("⚠️ No auth token found");
     return null;

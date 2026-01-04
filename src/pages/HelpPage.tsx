@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState } from "react";
+import { API_BASE_URL } from "../config/api";
 import { motion, useReducedMotion } from "framer-motion";
 import { Send, Loader2 } from "lucide-react";
 import AppLayout from "../components/layout/AppLayout";
@@ -17,13 +18,13 @@ interface Message {
 const FormattedMessage = ({ text, isUser }: { text: string; isUser: boolean }) => {
   // Split by double newlines for paragraphs
   const paragraphs = text.split(/\n\n+/);
-  
+
   return (
     <div className="space-y-2">
       {paragraphs.map((para, idx) => {
         // Check if paragraph starts with numbered list (1., 2., etc.)
         const listMatch = para.match(/^(\d+\.\s+.*(?:\n\d+\.\s+.*)*)/);
-        
+
         if (listMatch) {
           // Render as numbered list
           const listItems = para.split(/\n(?=\d+\.\s+)/).map((item) => {
@@ -47,14 +48,14 @@ const FormattedMessage = ({ text, isUser }: { text: string; isUser: boolean }) =
               </li>
             );
           });
-          
+
           return (
             <ol key={idx} className="list-decimal list-inside space-y-1.5">
               {listItems}
             </ol>
           );
         }
-        
+
         // Regular paragraph - parse bold and line breaks
         const lines = para.split(/\n/);
         return (
@@ -98,7 +99,7 @@ const HelpPage = () => {
   ]);
   const messagesScrollRef = useRef<HTMLDivElement>(null);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
-  
+
   const scrollMessagesToBottom = () => {
     const el = messagesScrollRef.current;
     if (!el) return;
@@ -131,9 +132,9 @@ const HelpPage = () => {
 
     try {
       const token = localStorage.getItem("token");
-      
+
       // Call backend endpoint for help chat
-      const response = await fetch("http://localhost:5000/api/help/chat", {
+      const response = await fetch(`${API_BASE_URL}/api/help/chat`, {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
@@ -216,9 +217,8 @@ const HelpPage = () => {
                 className={`flex ${message.sender === "user" ? "justify-end" : "justify-start"}`}
               >
                 <div
-                  className={`max-w-[85%] sm:max-w-[75%] lg:max-w-[60%] rounded-2xl lg:rounded-[1.5vw] flex gap-2 lg:gap-[0.5vw] ${
-                    message.sender === "user" ? "flex-row-reverse" : ""
-                  }`}
+                  className={`max-w-[85%] sm:max-w-[75%] lg:max-w-[60%] rounded-2xl lg:rounded-[1.5vw] flex gap-2 lg:gap-[0.5vw] ${message.sender === "user" ? "flex-row-reverse" : ""
+                    }`}
                 >
                   <img
                     src={message.sender === "ai" ? ImagesPath.botIcon : ImagesPath.userIcon}
@@ -226,11 +226,10 @@ const HelpPage = () => {
                     className="object-contain w-6 h-6 sm:w-8 sm:h-8 lg:w-[2.5vw] lg:h-[2.5vw] flex-shrink-0"
                   />
                   <div
-                    className={`font-size-18px sm:font-size-20px font-poppins-regular rounded-2xl lg:rounded-[1.5vw] px-4 py-3 break-words ${
-                      message.sender === "user"
-                        ? "bg-card border border-border text-text-primary"
-                        : "bg-primary text-white"
-                    }`}
+                    className={`font-size-18px sm:font-size-20px font-poppins-regular rounded-2xl lg:rounded-[1.5vw] px-4 py-3 break-words ${message.sender === "user"
+                      ? "bg-card border border-border text-text-primary"
+                      : "bg-primary text-white"
+                      }`}
                   >
                     <FormattedMessage text={message.text} isUser={message.sender === "user"} />
                   </div>
@@ -289,7 +288,7 @@ const HelpPage = () => {
             </Button>
           </motion.div>
         </div>
-        </AnimatedPage>
+      </AnimatedPage>
     </AppLayout>
   );
 };

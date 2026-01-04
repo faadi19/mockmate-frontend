@@ -23,6 +23,7 @@ import {
 
 import ContentHeader from "../components/layout/ContentHeader";
 import axios from "axios";
+import { API_BASE_URL } from "../config/api";
 import AnimatedPage from "../components/ui/AnimatedPage";
 
 ChartJS.register(CategoryScale, LinearScale, BarElement, LineElement, PointElement, Tooltip);
@@ -111,7 +112,7 @@ const PerformancePage = () => {
       try {
         // Try to fetch roles from backend
         // If backend has a dedicated endpoint, use it; otherwise extract from summary
-        const res = await axios.get("http://localhost:5000/api/performance/summary", {
+        const res = await axios.get(`${API_BASE_URL}/api/performance/summary`, {
           headers: { Authorization: `Bearer ${token}` },
         });
 
@@ -148,7 +149,7 @@ const PerformancePage = () => {
         setLoading(true);
         // Build API URL with role query parameter
         // Backend expects lowercase role values: "all", "frontend", "backend", "sqa"
-        const url = new URL("http://localhost:5000/api/performance/summary");
+        const url = new URL(`${API_BASE_URL}/api/performance/summary`);
         if (selectedRole !== "all") {
           url.searchParams.append("role", selectedRole.toLowerCase());
         }
@@ -179,11 +180,11 @@ const PerformancePage = () => {
               overallScore: res.data.summary.bodyLanguage?.overallScore || 0,
             },
           };
-          
+
           setSummary(freshSummary);
           // Reset to first page when data changes
           setCurrentPage(0);
-          
+
           // Build interview data array with IDs
           // Backend may return progressOverTime as array of scores or array of objects with id
           const progressData = res.data.summary.progressOverTime || [];
@@ -207,7 +208,7 @@ const PerformancePage = () => {
           setInterviewData(interviews);
           // Store graph data separately
           setGraphData(res.data.summary.progressOverTime || []);
-          
+
           // Update available roles if backend returns them
           if (res?.data?.roles && Array.isArray(res.data.roles)) {
             setAvailableRoles(res.data.roles);
@@ -237,7 +238,7 @@ const PerformancePage = () => {
         console.log("🔍 Fetching performance for interviewId:", selectedInterviewId);
 
         const res = await axios.get(
-          `http://localhost:5000/api/interview/${selectedInterviewId}/performance`,
+          `${API_BASE_URL}/api/interview/${selectedInterviewId}/performance`,
           {
             headers: { Authorization: `Bearer ${token}` },
           }
@@ -255,7 +256,7 @@ const PerformancePage = () => {
           // Use current state values at the time of fetch
           const currentInterviewData = interviewData.length > 0 ? interviewData.length : 1;
           const currentGraphData = graphData.length > 0 ? graphData : [];
-          
+
           const newSummary = {
             interviewsCompleted: currentInterviewData, // Keep total count for context
             overallScore: res.data.overallScore || 0,
@@ -276,16 +277,16 @@ const PerformancePage = () => {
               expression: res.data.bodyLanguage?.expression || res.data.expression || 'neutral',
               expressionConfidence: res.data.bodyLanguage?.expressionConfidence || res.data.expressionConfidence || 0,
               dominantExpression: res.data.bodyLanguage?.dominantExpression || res.data.dominantExpression || 'neutral',
-              overallScore: res.data.bodyLanguage?.overallScore || 
-                           (res.data.bodyLanguage?.eyeContact && res.data.bodyLanguage?.engagement && 
-                            res.data.bodyLanguage?.attention && res.data.bodyLanguage?.stability
-                             ? Math.round(
-                                 (res.data.bodyLanguage.eyeContact + 
-                                  res.data.bodyLanguage.engagement + 
-                                  res.data.bodyLanguage.attention + 
-                                  res.data.bodyLanguage.stability) / 4
-                               )
-                             : 0),
+              overallScore: res.data.bodyLanguage?.overallScore ||
+                (res.data.bodyLanguage?.eyeContact && res.data.bodyLanguage?.engagement &&
+                  res.data.bodyLanguage?.attention && res.data.bodyLanguage?.stability
+                  ? Math.round(
+                    (res.data.bodyLanguage.eyeContact +
+                      res.data.bodyLanguage.engagement +
+                      res.data.bodyLanguage.attention +
+                      res.data.bodyLanguage.stability) / 4
+                  )
+                  : 0),
             },
           };
 
@@ -366,20 +367,20 @@ const PerformancePage = () => {
     return isSelected ? 4 : (chartType === "bar" ? 0 : 3);
   });
 
-  const pointRadii = chartType === "bar" 
-    ? 0 
+  const pointRadii = chartType === "bar"
+    ? 0
     : interviewIds.map((interviewId) => {
-        return selectedInterviewId === interviewId ? 8 : 5;
-      });
+      return selectedInterviewId === interviewId ? 8 : 5;
+    });
 
   const pointBackgroundColors = interviewIds.map((interviewId) => {
-    return selectedInterviewId === interviewId 
-      ? "rgba(255, 255, 255, 1)" 
+    return selectedInterviewId === interviewId
+      ? "rgba(255, 255, 255, 1)"
       : chartColors.primary(1);
   });
 
   const pointBorderColors = interviewIds.map((interviewId) => {
-    return selectedInterviewId === interviewId 
+    return selectedInterviewId === interviewId
       ? chartColors.primary(1)
       : "rgba(255, 255, 255, 1)";
   });
@@ -394,7 +395,7 @@ const PerformancePage = () => {
       {
         label: selectedInterviewId ? "Selected Interview Score" : "Interview Score",
         data: graphScores,
-        backgroundColor: chartType === "bar" 
+        backgroundColor: chartType === "bar"
           ? backgroundColors
           : chartColors.primary(0.12),
         borderColor: borderColors,
@@ -419,9 +420,9 @@ const PerformancePage = () => {
     if (elements && elements.length > 0) {
       const elementIndex = elements[0].index;
       const clickedInterviewId = interviewIds[elementIndex];
-      
+
       console.log("🖱️ Chart clicked - elementIndex:", elementIndex, "interviewId:", clickedInterviewId);
-      
+
       // Toggle selection: if same interview clicked, deselect; otherwise select
       if (selectedInterviewId === clickedInterviewId) {
         console.log("🔓 Deselecting interview:", clickedInterviewId);
@@ -441,7 +442,7 @@ const PerformancePage = () => {
       intersect: false,
       mode: 'index' as const,
     },
-    plugins: { 
+    plugins: {
       legend: { display: false },
       tooltip: {
         backgroundColor: "rgba(0, 0, 0, 0.9)",
@@ -468,10 +469,10 @@ const PerformancePage = () => {
     },
     scales: {
       x: {
-        grid: { 
+        grid: {
           display: false,
         },
-        ticks: { 
+        ticks: {
           color: chartColors.textSecondary(0.9),
           maxRotation: 45,
           minRotation: 45,
@@ -490,14 +491,14 @@ const PerformancePage = () => {
       y: {
         beginAtZero: true,
         max: 100,
-        ticks: { 
+        ticks: {
           color: chartColors.textSecondary(0.9),
           font: {
             size: 11,
           },
           stepSize: 10,
         },
-        grid: { 
+        grid: {
           color: "rgba(255,255,255,0.08)",
           lineWidth: 1,
         },
@@ -518,408 +519,408 @@ const PerformancePage = () => {
           backButton
         />
 
-      {/* ===== TOP SECTION ===== */}
-      <motion.div
-        initial={reduceMotion ? false : "hidden"}
-        animate={reduceMotion ? undefined : "show"}
-        variants={{
-          hidden: { opacity: 0 },
-          show: { opacity: 1, transition: { staggerChildren: 0.08 } },
-        }}
-        className="grid grid-cols-1 lg:grid-cols-3 gap-4 mb-4 max-w-full"
-      >
-
-        {/* ===== CHART ===== */}
+        {/* ===== TOP SECTION ===== */}
         <motion.div
+          initial={reduceMotion ? false : "hidden"}
+          animate={reduceMotion ? undefined : "show"}
           variants={{
-            hidden: { opacity: 0, y: 14 },
-            show: { opacity: 1, y: 0, transition: { duration: 0.45, ease: "easeOut" } },
+            hidden: { opacity: 0 },
+            show: { opacity: 1, transition: { staggerChildren: 0.08 } },
           }}
-          whileHover={reduceMotion ? undefined : { y: -4 }}
-          transition={{ type: "spring", stiffness: 240, damping: 18 }}
-          className="lg:col-span-2"
+          className="grid grid-cols-1 lg:grid-cols-3 gap-4 mb-4 max-w-full"
         >
-        <Card className="lg:col-span-2">
-          <CardHeader className="pb-2">
-            <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-3 flex-wrap">
-              <CardTitle className="text-2xl font-semibold">
-                Performance Per Interview
-              </CardTitle>
-              <div className="flex gap-2 items-center flex-wrap">
-                {/* Role Filter Dropdown */}
-                {/* NOTE: Option values must match backend exactly (lowercase) */}
-                {/* Roles are dynamically fetched from backend */}
-                {/* On role change, interview selection is reset */}
-                <select
-                  value={selectedRole}
-                  onChange={(e) => {
-                    console.log("🔄 Role changed to:", e.target.value);
-                    setSelectedRole(e.target.value);
-                    setSelectedInterviewId(null); // Reset interview selection on role change
-                  }}
-                  className="px-3 py-1.5 text-xs sm:text-sm rounded-md bg-background border border-border text-text-primary focus:outline-none focus:ring-2 focus:ring-primary/35 focus:border-transparent transition-colors hover:border-primary/60"
-                  disabled={loading}
-                >
-                  <option value="all">All Interviews</option>
-                  {availableRoles.map((role) => (
-                    <option key={role} value={role.toLowerCase()}>
-                      {role.charAt(0).toUpperCase() + role.slice(1)}
-                    </option>
-                  ))}
-                </select>
-                
-                {/* Clear selection button - show only when interview is selected */}
-                {selectedInterviewId && (
-                  <Button
-                    variant="ghost"
-                    onClick={() => setSelectedInterviewId(null)}
-                    className="text-xs sm:text-sm px-3 py-1.5"
-                    size="sm"
-                    title="Clear selection to show role average"
-                  >
-                    Clear
-                  </Button>
-                )}
-                
-                {/* Chart Type Buttons */}
-                <Button
-                  variant={chartType === "line" ? "default" : "ghost"}
-                  onClick={() => setChartType("line")}
-                  className="text-xs sm:text-sm px-3 py-1.5"
-                  size="sm"
-                >
-                  Line
-                </Button>
-                <Button
-                  variant={chartType === "bar" ? "default" : "ghost"}
-                  onClick={() => setChartType("bar")}
-                  className="text-xs sm:text-sm px-3 py-1.5"
-                  size="sm"
-                >
-                  Bar
-                </Button>
-              </div>
-            </div>
-          </CardHeader>
 
-          <CardContent>
-            <div className="h-64 lg:h-[22vw] relative">
-              {loading ? (
-                <div className="absolute inset-0 flex items-center justify-center">
-                  <div className="text-primary text-sm">Loading...</div>
-                </div>
-              ) : (
-                <>
-                  {chartType === "line" ? (
-                    <Line data={chartData} options={chartOptions} />
-                  ) : (
-                    <Bar data={chartData} options={chartOptions} />
-                  )}
-                </>
-              )}
-            </div>
-            
-            {/* Pagination Controls */}
-            {totalPages > 1 && (
-              <div className="flex items-center justify-between mt-4 pt-4 border-t border-gray-700">
-                <Button
-                  variant="ghost"
-                  onClick={handlePrevPage}
-                  disabled={currentPage === 0}
-                  className="text-sm"
-                  size="sm"
-                >
-                  Previous
-                </Button>
-                
-                <div className="flex items-center gap-2">
-                  <span className="text-sm text-gray-400">
-                    Page {currentPage + 1} of {totalPages}
-                  </span>
-                  <span className="text-xs text-gray-500">
-                    ({startIndex + 1}-{endIndex} of {allInterviewLabels.length})
-                  </span>
-                </div>
-                
-                <Button
-                  variant="ghost"
-                  onClick={handleNextPage}
-                  disabled={currentPage >= totalPages - 1}
-                  className="text-sm"
-                  size="sm"
-                >
-                  Next
-                </Button>
-              </div>
-            )}
-          </CardContent>
-        </Card>
-        </motion.div>
-
-        {/* ===== STATS PANEL ===== */}
-        <motion.div
-          variants={{
-            hidden: { opacity: 0, y: 14 },
-            show: { opacity: 1, y: 0, transition: { duration: 0.45, ease: "easeOut" } },
-          }}
-          whileHover={reduceMotion ? undefined : { y: -4 }}
-          transition={{ type: "spring", stiffness: 240, damping: 18 }}
-        >
-        <Card>
-          <CardHeader>
-            <CardTitle className="text-2xl font-semibold">Interview Stats</CardTitle>
-          </CardHeader>
-
-          <CardContent>
-            <div className="space-y-4">
-
-              {/* Interviews Completed */}
-              <div>
-                <div className="flex justify-between mb-1 text-gray-300">
-                  <span>Interviews Completed</span>
-                  <span>{summary.interviewsCompleted}</span>
-                </div>
-                <ProgressBar
-                  value={summary.interviewsCompleted}
-                  max={Math.max(summary.interviewsCompleted, 1)}
-                  colorClass="bg-primary"
-                />
-              </div>
-
-              {/* Overall Score */}
-              <div>
-                <div className="flex justify-between mb-1 text-gray-300">
-                  <span>Overall Score</span>
-                  <span>{summary.overallPercentage}%</span>
-                </div>
-                <ProgressBar value={summary.overallPercentage} max={100} colorClass="bg-primary" />
-              </div>
-
-              {/* Improvement */}
-              {selectedInterviewId ? (
-                <div className="rounded-lg border border-border bg-background/60 p-3">
-                  <p className="text-sm text-text-secondary">
-                    Comparison is shown only in role view. Click “Clear” above the chart to see role comparison.
-                  </p>
-                </div>
-              ) : selectedRole === "all" ? (
-                <div className="rounded-lg border border-border bg-background/60 p-3">
-                  <p className="text-sm text-text-secondary">
-                    Select a specific role to see improvement vs your previous interview in that role.
-                  </p>
-                </div>
-              ) : !hasSameRolePreviousInterview ? (
-                <div className="rounded-lg border border-border bg-background/60 p-3">
-                  <p className="text-sm text-text-secondary">
-                    No previous <span className="text-text-primary font-medium">{roleLabel}</span> interview found to compare yet.
-                  </p>
-                </div>
-              ) : (
-                <div>
-                  <div className="flex justify-between mb-1">
-                    <span className="text-gray-300">
-                      Improvement vs previous {roleLabel} interview
-                    </span>
-                    <span
-                      className={
-                        summary.improvement > 0
-                          ? "text-green-400 font-semibold"
-                          : summary.improvement < 0
-                            ? "text-red-400 font-semibold"
-                            : "text-gray-300 font-semibold"
-                      }
+          {/* ===== CHART ===== */}
+          <motion.div
+            variants={{
+              hidden: { opacity: 0, y: 14 },
+              show: { opacity: 1, y: 0, transition: { duration: 0.45, ease: "easeOut" } },
+            }}
+            whileHover={reduceMotion ? undefined : { y: -4 }}
+            transition={{ type: "spring", stiffness: 240, damping: 18 }}
+            className="lg:col-span-2"
+          >
+            <Card className="lg:col-span-2">
+              <CardHeader className="pb-2">
+                <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-3 flex-wrap">
+                  <CardTitle className="text-2xl font-semibold">
+                    Performance Per Interview
+                  </CardTitle>
+                  <div className="flex gap-2 items-center flex-wrap">
+                    {/* Role Filter Dropdown */}
+                    {/* NOTE: Option values must match backend exactly (lowercase) */}
+                    {/* Roles are dynamically fetched from backend */}
+                    {/* On role change, interview selection is reset */}
+                    <select
+                      value={selectedRole}
+                      onChange={(e) => {
+                        console.log("🔄 Role changed to:", e.target.value);
+                        setSelectedRole(e.target.value);
+                        setSelectedInterviewId(null); // Reset interview selection on role change
+                      }}
+                      className="px-3 py-1.5 text-xs sm:text-sm rounded-md bg-background border border-border text-text-primary focus:outline-none focus:ring-2 focus:ring-primary/35 focus:border-transparent transition-colors hover:border-primary/60"
+                      disabled={loading}
                     >
-                      {summary.improvement > 0
-                        ? `+${summary.improvement}%`
-                        : summary.improvement < 0
-                          ? `${summary.improvement}%`
-                          : `0%`}
-                    </span>
+                      <option value="all">All Interviews</option>
+                      {availableRoles.map((role) => (
+                        <option key={role} value={role.toLowerCase()}>
+                          {role.charAt(0).toUpperCase() + role.slice(1)}
+                        </option>
+                      ))}
+                    </select>
+
+                    {/* Clear selection button - show only when interview is selected */}
+                    {selectedInterviewId && (
+                      <Button
+                        variant="ghost"
+                        onClick={() => setSelectedInterviewId(null)}
+                        className="text-xs sm:text-sm px-3 py-1.5"
+                        size="sm"
+                        title="Clear selection to show role average"
+                      >
+                        Clear
+                      </Button>
+                    )}
+
+                    {/* Chart Type Buttons */}
+                    <Button
+                      variant={chartType === "line" ? "default" : "ghost"}
+                      onClick={() => setChartType("line")}
+                      className="text-xs sm:text-sm px-3 py-1.5"
+                      size="sm"
+                    >
+                      Line
+                    </Button>
+                    <Button
+                      variant={chartType === "bar" ? "default" : "ghost"}
+                      onClick={() => setChartType("bar")}
+                      className="text-xs sm:text-sm px-3 py-1.5"
+                      size="sm"
+                    >
+                      Bar
+                    </Button>
                   </div>
-                  <ProgressBar
-                    value={Math.abs(summary.improvement)}
-                    max={100}
-                    colorClass={
-                      summary.improvement > 0
-                        ? "bg-green-500"
-                        : summary.improvement < 0
-                          ? "bg-red-500"
-                          : "bg-gray-500"
-                    }
-                  />
                 </div>
-              )}
+              </CardHeader>
 
-            </div>
-          </CardContent>
-        </Card>
+              <CardContent>
+                <div className="h-64 lg:h-[22vw] relative">
+                  {loading ? (
+                    <div className="absolute inset-0 flex items-center justify-center">
+                      <div className="text-primary text-sm">Loading...</div>
+                    </div>
+                  ) : (
+                    <>
+                      {chartType === "line" ? (
+                        <Line data={chartData} options={chartOptions} />
+                      ) : (
+                        <Bar data={chartData} options={chartOptions} />
+                      )}
+                    </>
+                  )}
+                </div>
+
+                {/* Pagination Controls */}
+                {totalPages > 1 && (
+                  <div className="flex items-center justify-between mt-4 pt-4 border-t border-gray-700">
+                    <Button
+                      variant="ghost"
+                      onClick={handlePrevPage}
+                      disabled={currentPage === 0}
+                      className="text-sm"
+                      size="sm"
+                    >
+                      Previous
+                    </Button>
+
+                    <div className="flex items-center gap-2">
+                      <span className="text-sm text-gray-400">
+                        Page {currentPage + 1} of {totalPages}
+                      </span>
+                      <span className="text-xs text-gray-500">
+                        ({startIndex + 1}-{endIndex} of {allInterviewLabels.length})
+                      </span>
+                    </div>
+
+                    <Button
+                      variant="ghost"
+                      onClick={handleNextPage}
+                      disabled={currentPage >= totalPages - 1}
+                      className="text-sm"
+                      size="sm"
+                    >
+                      Next
+                    </Button>
+                  </div>
+                )}
+              </CardContent>
+            </Card>
+          </motion.div>
+
+          {/* ===== STATS PANEL ===== */}
+          <motion.div
+            variants={{
+              hidden: { opacity: 0, y: 14 },
+              show: { opacity: 1, y: 0, transition: { duration: 0.45, ease: "easeOut" } },
+            }}
+            whileHover={reduceMotion ? undefined : { y: -4 }}
+            transition={{ type: "spring", stiffness: 240, damping: 18 }}
+          >
+            <Card>
+              <CardHeader>
+                <CardTitle className="text-2xl font-semibold">Interview Stats</CardTitle>
+              </CardHeader>
+
+              <CardContent>
+                <div className="space-y-4">
+
+                  {/* Interviews Completed */}
+                  <div>
+                    <div className="flex justify-between mb-1 text-gray-300">
+                      <span>Interviews Completed</span>
+                      <span>{summary.interviewsCompleted}</span>
+                    </div>
+                    <ProgressBar
+                      value={summary.interviewsCompleted}
+                      max={Math.max(summary.interviewsCompleted, 1)}
+                      colorClass="bg-primary"
+                    />
+                  </div>
+
+                  {/* Overall Score */}
+                  <div>
+                    <div className="flex justify-between mb-1 text-gray-300">
+                      <span>Overall Score</span>
+                      <span>{summary.overallPercentage}%</span>
+                    </div>
+                    <ProgressBar value={summary.overallPercentage} max={100} colorClass="bg-primary" />
+                  </div>
+
+                  {/* Improvement */}
+                  {selectedInterviewId ? (
+                    <div className="rounded-lg border border-border bg-background/60 p-3">
+                      <p className="text-sm text-text-secondary">
+                        Comparison is shown only in role view. Click “Clear” above the chart to see role comparison.
+                      </p>
+                    </div>
+                  ) : selectedRole === "all" ? (
+                    <div className="rounded-lg border border-border bg-background/60 p-3">
+                      <p className="text-sm text-text-secondary">
+                        Select a specific role to see improvement vs your previous interview in that role.
+                      </p>
+                    </div>
+                  ) : !hasSameRolePreviousInterview ? (
+                    <div className="rounded-lg border border-border bg-background/60 p-3">
+                      <p className="text-sm text-text-secondary">
+                        No previous <span className="text-text-primary font-medium">{roleLabel}</span> interview found to compare yet.
+                      </p>
+                    </div>
+                  ) : (
+                    <div>
+                      <div className="flex justify-between mb-1">
+                        <span className="text-gray-300">
+                          Improvement vs previous {roleLabel} interview
+                        </span>
+                        <span
+                          className={
+                            summary.improvement > 0
+                              ? "text-green-400 font-semibold"
+                              : summary.improvement < 0
+                                ? "text-red-400 font-semibold"
+                                : "text-gray-300 font-semibold"
+                          }
+                        >
+                          {summary.improvement > 0
+                            ? `+${summary.improvement}%`
+                            : summary.improvement < 0
+                              ? `${summary.improvement}%`
+                              : `0%`}
+                        </span>
+                      </div>
+                      <ProgressBar
+                        value={Math.abs(summary.improvement)}
+                        max={100}
+                        colorClass={
+                          summary.improvement > 0
+                            ? "bg-green-500"
+                            : summary.improvement < 0
+                              ? "bg-red-500"
+                              : "bg-gray-500"
+                        }
+                      />
+                    </div>
+                  )}
+
+                </div>
+              </CardContent>
+            </Card>
+          </motion.div>
         </motion.div>
-      </motion.div>
 
-      {/* ========================================================
+        {/* ========================================================
            DETAILED ANALYSIS
       ======================================================== */}
-      <motion.div
-        initial={reduceMotion ? false : { opacity: 0, y: 12 }}
-        animate={reduceMotion ? undefined : { opacity: 1, y: 0 }}
-        transition={{ duration: 0.5, ease: "easeOut", delay: 0.05 }}
-      >
-      <Card>
-        <CardHeader>
-          <div className="flex justify-between items-center">
-            <CardTitle className="text-2xl font-semibold">Detailed Analysis</CardTitle>
+        <motion.div
+          initial={reduceMotion ? false : { opacity: 0, y: 12 }}
+          animate={reduceMotion ? undefined : { opacity: 1, y: 0 }}
+          transition={{ duration: 0.5, ease: "easeOut", delay: 0.05 }}
+        >
+          <Card>
+            <CardHeader>
+              <div className="flex justify-between items-center">
+                <CardTitle className="text-2xl font-semibold">Detailed Analysis</CardTitle>
 
-            <div className="flex">
-              <Button
-                variant={activeTab === "answer-quality" ? "default" : "ghost"}
-                onClick={() => setActiveTab("answer-quality")}
-                className="rounded-r-none"
-              >
-                Answer Quality
-              </Button>
+                <div className="flex">
+                  <Button
+                    variant={activeTab === "answer-quality" ? "default" : "ghost"}
+                    onClick={() => setActiveTab("answer-quality")}
+                    className="rounded-r-none"
+                  >
+                    Answer Quality
+                  </Button>
 
-              <Button
-                variant={activeTab === "body-language" ? "default" : "ghost"}
-                onClick={() => setActiveTab("body-language")}
-                className="rounded-l-none"
-              >
-                Body Language
-              </Button>
-            </div>
-          </div>
-        </CardHeader>
+                  <Button
+                    variant={activeTab === "body-language" ? "default" : "ghost"}
+                    onClick={() => setActiveTab("body-language")}
+                    className="rounded-l-none"
+                  >
+                    Body Language
+                  </Button>
+                </div>
+              </div>
+            </CardHeader>
 
-        <CardContent>
+            <CardContent>
 
-          {/* =====================================================
+              {/* =====================================================
                 ANSWER QUALITY (Uses overallPercentage)
           ===================================================== */}
-          {activeTab === "answer-quality" && (
-            <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} className="space-y-6">
+              {activeTab === "answer-quality" && (
+                <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} className="space-y-6">
 
-              {/* HEADER + TOTAL SCORE */}
-              <div className="flex justify-between items-center mb-4">
-                <h3 className="text-xl font-bold">Answer Quality</h3>
+                  {/* HEADER + TOTAL SCORE */}
+                  <div className="flex justify-between items-center mb-4">
+                    <h3 className="text-xl font-bold">Answer Quality</h3>
 
-                <span className="text-xl text-primary">
-                  {summary.overallPercentage ?? 0}%
-                </span>
-              </div>
-
-              {/* Sub-metrics */}
-              {Object.entries(summary.answerQuality).map(([key, value]: any) => (
-                <div key={key} className="mb-6">
-                  <div className="flex justify-between text-gray-300 mb-1">
-                    <span>{key.replace(/^\w/, (c: string) => c.toUpperCase())}</span>
-                    <span>{value}%</span>
+                    <span className="text-xl text-primary">
+                      {summary.overallPercentage ?? 0}%
+                    </span>
                   </div>
 
-                  <ProgressBar value={value} max={100} colorClass="bg-primary" />
-                </div>
-              ))}
+                  {/* Sub-metrics */}
+                  {Object.entries(summary.answerQuality).map(([key, value]: any) => (
+                    <div key={key} className="mb-6">
+                      <div className="flex justify-between text-gray-300 mb-1">
+                        <span>{key.replace(/^\w/, (c: string) => c.toUpperCase())}</span>
+                        <span>{value}%</span>
+                      </div>
 
-            </motion.div>
-          )}
+                      <ProgressBar value={value} max={100} colorClass="bg-primary" />
+                    </div>
+                  ))}
 
-          {/* =====================================================
+                </motion.div>
+              )}
+
+              {/* =====================================================
                 BODY LANGUAGE (Real data from backend)
           ===================================================== */}
-          {activeTab === "body-language" && (
-            <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} className="space-y-6">
+              {activeTab === "body-language" && (
+                <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} className="space-y-6">
 
-              {/* HEADER + TOTAL SCORE */}
-              <div className="flex justify-between items-center mb-4">
-                <h3 className="text-xl font-bold">Body Language</h3>
-                <span className="text-xl text-primary">
-                  {summary.bodyLanguage?.overallScore || 
-                   (summary.bodyLanguage?.eyeContact && summary.bodyLanguage?.engagement && summary.bodyLanguage?.attention && summary.bodyLanguage?.stability
-                     ? Math.round(
-                         (summary.bodyLanguage.eyeContact + 
-                          summary.bodyLanguage.engagement + 
-                          summary.bodyLanguage.attention + 
-                          summary.bodyLanguage.stability) / 4
-                       )
-                     : 0)}%
-                </span>
-              </div>
+                  {/* HEADER + TOTAL SCORE */}
+                  <div className="flex justify-between items-center mb-4">
+                    <h3 className="text-xl font-bold">Body Language</h3>
+                    <span className="text-xl text-primary">
+                      {summary.bodyLanguage?.overallScore ||
+                        (summary.bodyLanguage?.eyeContact && summary.bodyLanguage?.engagement && summary.bodyLanguage?.attention && summary.bodyLanguage?.stability
+                          ? Math.round(
+                            (summary.bodyLanguage.eyeContact +
+                              summary.bodyLanguage.engagement +
+                              summary.bodyLanguage.attention +
+                              summary.bodyLanguage.stability) / 4
+                          )
+                          : 0)}%
+                    </span>
+                  </div>
 
-              {/* Expression Badge */}
-              {summary.bodyLanguage?.dominantExpression && (
-                <div className="mb-4 p-3 bg-primary/10 border border-primary/20 rounded-lg">
-                  <div className="flex items-center justify-between">
-                    <span className="text-gray-300">Dominant Expression</span>
-                    <div className="flex items-center gap-2">
-                      <span className="text-lg">
-                        {summary.bodyLanguage.dominantExpression === 'happy' && '😊'}
-                        {summary.bodyLanguage.dominantExpression === 'sad' && '😢'}
-                        {summary.bodyLanguage.dominantExpression === 'nervous' && '😰'}
-                        {summary.bodyLanguage.dominantExpression === 'neutral' && '😐'}
-                        {summary.bodyLanguage.dominantExpression === 'shocked' && '😲'}
-                      </span>
-                      <span className="text-primary font-semibold capitalize">
-                        {summary.bodyLanguage.dominantExpression}
-                      </span>
-                      {summary.bodyLanguage.expressionConfidence > 0 && (
-                        <span className="text-gray-400 text-sm">
-                          ({Math.round(summary.bodyLanguage.expressionConfidence)}%)
-                        </span>
-                      )}
+                  {/* Expression Badge */}
+                  {summary.bodyLanguage?.dominantExpression && (
+                    <div className="mb-4 p-3 bg-primary/10 border border-primary/20 rounded-lg">
+                      <div className="flex items-center justify-between">
+                        <span className="text-gray-300">Dominant Expression</span>
+                        <div className="flex items-center gap-2">
+                          <span className="text-lg">
+                            {summary.bodyLanguage.dominantExpression === 'happy' && '😊'}
+                            {summary.bodyLanguage.dominantExpression === 'sad' && '😢'}
+                            {summary.bodyLanguage.dominantExpression === 'nervous' && '😰'}
+                            {summary.bodyLanguage.dominantExpression === 'neutral' && '😐'}
+                            {summary.bodyLanguage.dominantExpression === 'shocked' && '😲'}
+                          </span>
+                          <span className="text-primary font-semibold capitalize">
+                            {summary.bodyLanguage.dominantExpression}
+                          </span>
+                          {summary.bodyLanguage.expressionConfidence > 0 && (
+                            <span className="text-gray-400 text-sm">
+                              ({Math.round(summary.bodyLanguage.expressionConfidence)}%)
+                            </span>
+                          )}
+                        </div>
+                      </div>
                     </div>
-                  </div>
-                </div>
+                  )}
+
+                  {/* Body Language Metrics */}
+                  {[
+                    {
+                      label: "Eye Contact",
+                      value: summary.bodyLanguage?.eyeContact || 0,
+                      key: "eyeContact"
+                    },
+                    {
+                      label: "Engagement",
+                      value: summary.bodyLanguage?.engagement || 0,
+                      key: "engagement"
+                    },
+                    {
+                      label: "Attention",
+                      value: summary.bodyLanguage?.attention || 0,
+                      key: "attention"
+                    },
+                    {
+                      label: "Stability",
+                      value: summary.bodyLanguage?.stability || 0,
+                      key: "stability"
+                    },
+                  ].map(({ label, value, key }) => (
+                    <div key={key} className="mb-6">
+                      <div className="flex justify-between text-gray-300 mb-1">
+                        <span>{label}</span>
+                        <span>{value}%</span>
+                      </div>
+
+                      <ProgressBar value={value} max={100} colorClass="bg-primary" />
+                    </div>
+                  ))}
+
+                  {/* No Data Message */}
+                  {(!summary.bodyLanguage ||
+                    (summary.bodyLanguage.eyeContact === 0 &&
+                      summary.bodyLanguage.engagement === 0 &&
+                      summary.bodyLanguage.attention === 0 &&
+                      summary.bodyLanguage.stability === 0)) && (
+                      <div className="text-center py-8 text-gray-400">
+                        <p>No body language data available yet.</p>
+                        <p className="text-sm mt-2">Complete an interview to see your body language analysis.</p>
+                      </div>
+                    )}
+
+                </motion.div>
               )}
 
-              {/* Body Language Metrics */}
-              {[
-                { 
-                  label: "Eye Contact", 
-                  value: summary.bodyLanguage?.eyeContact || 0,
-                  key: "eyeContact"
-                },
-                { 
-                  label: "Engagement", 
-                  value: summary.bodyLanguage?.engagement || 0,
-                  key: "engagement"
-                },
-                { 
-                  label: "Attention", 
-                  value: summary.bodyLanguage?.attention || 0,
-                  key: "attention"
-                },
-                { 
-                  label: "Stability", 
-                  value: summary.bodyLanguage?.stability || 0,
-                  key: "stability"
-                },
-              ].map(({ label, value, key }) => (
-                <div key={key} className="mb-6">
-                  <div className="flex justify-between text-gray-300 mb-1">
-                    <span>{label}</span>
-                    <span>{value}%</span>
-                  </div>
-
-                  <ProgressBar value={value} max={100} colorClass="bg-primary" />
-                </div>
-              ))}
-
-              {/* No Data Message */}
-              {(!summary.bodyLanguage || 
-                (summary.bodyLanguage.eyeContact === 0 && 
-                 summary.bodyLanguage.engagement === 0 && 
-                 summary.bodyLanguage.attention === 0 && 
-                 summary.bodyLanguage.stability === 0)) && (
-                <div className="text-center py-8 text-gray-400">
-                  <p>No body language data available yet.</p>
-                  <p className="text-sm mt-2">Complete an interview to see your body language analysis.</p>
-                </div>
-              )}
-
-            </motion.div>
-          )}
-
-        </CardContent>
-      </Card>
-      </motion.div>
+            </CardContent>
+          </Card>
+        </motion.div>
       </AnimatedPage>
     </AppLayout>
   );

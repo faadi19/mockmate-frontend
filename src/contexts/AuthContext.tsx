@@ -1,5 +1,6 @@
 import { createContext, useContext, useEffect, useState, ReactNode } from "react";
 import axios from "axios";
+import { API_BASE_URL } from "../config/api";
 import { clearDemoMode } from "../utils/demoMode";
 
 type User = {
@@ -42,7 +43,7 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
   const isSessionExpired = (): boolean => {
     const lastActivity = localStorage.getItem("lastActivity");
     if (!lastActivity) return true;
-    
+
     const lastActivityTime = parseInt(lastActivity, 10);
     const now = Date.now();
     return (now - lastActivityTime) > SESSION_TIMEOUT;
@@ -137,7 +138,7 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
   // 1️⃣ LOGIN
   const login = async (email: string, password: string) => {
     clearDemoMode();
-    const res = await axios.post("http://localhost:5000/api/auth/login", {
+    const res = await axios.post(`${API_BASE_URL}/api/auth/login`, {
       email,
       password,
     });
@@ -162,7 +163,7 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
     citizenship: string
   ) => {
     clearDemoMode();
-    const res = await axios.post("http://localhost:5000/api/auth/register", {
+    const res = await axios.post(`${API_BASE_URL}/api/auth/register`, {
       name,
       email,
       password,
@@ -187,7 +188,7 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
     if (!currentToken) return;
 
     try {
-      const res = await axios.get("http://localhost:5000/api/profile/me", {
+      const res = await axios.get(`${API_BASE_URL}/api/profile/me`, {
         headers: { Authorization: `Bearer ${currentToken}` },
       });
 
@@ -212,7 +213,7 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
     } else {
       // Fetch user data from backend
       try {
-        const res = await axios.get("http://localhost:5000/api/profile/me", {
+        const res = await axios.get(`${API_BASE_URL}/api/profile/me`, {
           headers: { Authorization: `Bearer ${authToken}` },
         });
         setUser(res.data.user);

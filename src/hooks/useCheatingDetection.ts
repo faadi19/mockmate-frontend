@@ -13,7 +13,7 @@ import { useState, useRef, useEffect, useCallback } from "react";
 import { getHeadPosition, getHandPositions } from "../utils/mediapipeScoring";
 import { FACE_LANDMARKS } from "../utils/mediapipeScoring";
 
-const API_BASE_URL = "http://localhost:5000";
+import { API_BASE_URL } from '../config/api';
 
 /**
  * Behavioral cheating detection scores

@@ -8,6 +8,7 @@ import Button from "../components/ui/Button";
 import { Card, CardContent } from "../components/ui/Card";
 import AnimatedPage from "../components/ui/AnimatedPage";
 import axios from "axios";
+import { API_BASE_URL } from "../config/api";
 
 const UploadResumePage = () => {
   const navigate = useNavigate();
@@ -17,7 +18,7 @@ const UploadResumePage = () => {
   const [uploadStatus, setUploadStatus] = useState<"success" | "error" | null>(null);
   const [errorMessage, setErrorMessage] = useState("");
   const fileInputRef = useRef<HTMLInputElement>(null);
-  
+
   // JD Review Screen States
   const [showReview, setShowReview] = useState(false);
   const [jobDescription, setJobDescription] = useState<string[]>([]);
@@ -125,7 +126,7 @@ const UploadResumePage = () => {
       formData.append("resume", selectedFile);
 
       const response = await axios.post(
-        "http://localhost:5000/api/resume/upload",
+        `${API_BASE_URL}/api/resume/upload`,
         formData,
         {
           headers: {
@@ -148,18 +149,18 @@ const UploadResumePage = () => {
         // Handle auto-redirect if redirectTo is provided
         if (response.data.redirectTo && response.data.interview) {
           const { sessionId: responseSessionId, question, totalQuestions } = response.data.interview;
-          
+
           // Extract jobDescription from response - check multiple possible locations
-          const jdArray = response.data.jobDescription || 
-                         response.data.jobDescriptions || 
-                         response.data.jd ||
-                         response.data.interview?.jobDescription ||
-                         response.data.interview?.jobDescriptions ||
-                         response.data.interview?.jd ||
-                         [];
-          
+          const jdArray = response.data.jobDescription ||
+            response.data.jobDescriptions ||
+            response.data.jd ||
+            response.data.interview?.jobDescription ||
+            response.data.interview?.jobDescriptions ||
+            response.data.interview?.jd ||
+            [];
+
           console.log("Extracted JD array:", jdArray);
-          
+
           // Store session data temporarily (will be used when starting interview)
           if (responseSessionId) {
             setSessionId(responseSessionId);
@@ -177,7 +178,7 @@ const UploadResumePage = () => {
               localStorage.setItem(`interviewTotalQuestions_${responseSessionId}`, totalQuestions.toString());
             }
             localStorage.setItem(`interviewQuestionIndex_${responseSessionId}`, "0");
-            
+
             // Store a setupId for resume-based interviews (using sessionId as identifier)
             const resumeSetupId = `resume_${responseSessionId}`;
             setSetupId(resumeSetupId);
@@ -215,7 +216,7 @@ const UploadResumePage = () => {
       setUploadStatus("error");
       setErrorMessage(
         error.response?.data?.message ||
-          "Failed to upload resume. Please try again."
+        "Failed to upload resume. Please try again."
       );
     } finally {
       setIsUploading(false);
@@ -298,70 +299,70 @@ const UploadResumePage = () => {
           />
 
           <div className="flex flex-col gap-6 lg:gap-[1.5vw] max-w-3xl mx-auto">
-          {/* Invalid Role Message */}
-          {!loadingJD && isValidRole === false && (
-            <Card className="bg-warning/10 border border-warning/30 rounded-lg">
+            {/* Invalid Role Message */}
+            {!loadingJD && isValidRole === false && (
+              <Card className="bg-warning/10 border border-warning/30 rounded-lg">
+                <CardContent className="p-6">
+                  <p className="text-warning text-center">
+                    This role does not exist or is not recognized.
+                  </p>
+                </CardContent>
+              </Card>
+            )}
+
+            {/* Job Description Card - Always show card */}
+            <Card className="bg-background/60 border border-border rounded-lg">
               <CardContent className="p-6">
-                <p className="text-warning text-center">
-                  This role does not exist or is not recognized.
-                </p>
+                {loadingJD ? (
+                  <div className="flex items-center justify-center py-8">
+                    <p className="text-text-secondary">Loading job description...</p>
+                  </div>
+                ) : jobDescription.length > 0 ? (
+                  <div>
+                    <h3 className="text-lg font-semibold text-text-primary mb-4">
+                      This interview will be based on the following job description
+                    </h3>
+                    <ul className="space-y-3 text-text-secondary">
+                      {jobDescription.map((jd, idx) => (
+                        <li key={idx} className="flex items-start">
+                          <span className="mr-3 text-primary mt-1">•</span>
+                          <span className="flex-1">{jd}</span>
+                        </li>
+                      ))}
+                    </ul>
+                  </div>
+                ) : (
+                  <div>
+                    <h3 className="text-lg font-semibold text-text-primary mb-4">
+                      This interview will be based on the following job description
+                    </h3>
+                    <p className="text-text-secondary">Job description not available for this role.</p>
+                  </div>
+                )}
               </CardContent>
             </Card>
-          )}
 
-          {/* Job Description Card - Always show card */}
-          <Card className="bg-background/60 border border-border rounded-lg">
-            <CardContent className="p-6">
-              {loadingJD ? (
-                <div className="flex items-center justify-center py-8">
-                  <p className="text-text-secondary">Loading job description...</p>
-                </div>
-              ) : jobDescription.length > 0 ? (
-                <div>
-                  <h3 className="text-lg font-semibold text-text-primary mb-4">
-                    This interview will be based on the following job description
-                  </h3>
-                  <ul className="space-y-3 text-text-secondary">
-                    {jobDescription.map((jd, idx) => (
-                      <li key={idx} className="flex items-start">
-                        <span className="mr-3 text-primary mt-1">•</span>
-                        <span className="flex-1">{jd}</span>
-                      </li>
-                    ))}
-                  </ul>
-                </div>
-              ) : (
-                <div>
-                  <h3 className="text-lg font-semibold text-text-primary mb-4">
-                    This interview will be based on the following job description
-                  </h3>
-                  <p className="text-text-secondary">Job description not available for this role.</p>
-                </div>
-              )}
-            </CardContent>
-          </Card>
+            {error && (
+              <p className="text-sm text-red-400">{error}</p>
+            )}
 
-          {error && (
-            <p className="text-sm text-red-400">{error}</p>
-          )}
-
-          {/* Start Interview Button */}
-          <Button
-            onClick={handleStartInterview}
-            className="w-full flex items-center justify-center gap-2"
-            disabled={loading}
-            loading={loading}
-            icons={
-              !loading ? (
-                <ArrowRight className="size-5 lg:size-[1.5vw] text-text-secondary" />
-              ) : undefined
-            }
-            iconsPosition="right"
-            rounded
-            size="lg"
-          >
-            {loading ? "Starting Interview..." : "Start Interview"}
-          </Button>
+            {/* Start Interview Button */}
+            <Button
+              onClick={handleStartInterview}
+              className="w-full flex items-center justify-center gap-2"
+              disabled={loading}
+              loading={loading}
+              icons={
+                !loading ? (
+                  <ArrowRight className="size-5 lg:size-[1.5vw] text-text-secondary" />
+                ) : undefined
+              }
+              iconsPosition="right"
+              rounded
+              size="lg"
+            >
+              {loading ? "Starting Interview..." : "Start Interview"}
+            </Button>
           </div>
         </AnimatedPage>
       </AppLayout>
@@ -374,140 +375,139 @@ const UploadResumePage = () => {
         <ContentHeader title="Upload Resume" />
 
         <div className="max-w-4xl mx-auto mt-8 w-full px-4 sm:px-0">
-        <motion.div
-          initial={reduceMotion ? false : { opacity: 0, y: 14 }}
-          animate={reduceMotion ? undefined : { opacity: 1, y: 0 }}
-          transition={{ duration: 0.5, ease: "easeOut" }}
-          whileHover={reduceMotion ? undefined : { y: -4 }}
-          className="bg-card rounded-2xl border border-border p-6 lg:p-8 shadow-sm"
-        >
-          {/* Instructions */}
-          <div className="mb-6">
-            <p className="text-text-primary text-sm lg:text-base mb-2">
-              Upload your resume to help us personalize your interview experience.
-            </p>
-            <p className="text-text-secondary text-xs lg:text-sm">
-              Accepted formats: PDF, Word (.doc, .docx), or PNG (Max size: 10MB)
-            </p>
-          </div>
-
-          {/* Upload Area */}
-          <div
-            onDragOver={handleDragOver}
-            onDrop={handleDrop}
-            className={`border-2 border-dashed rounded-xl p-6 sm:p-8 lg:p-12 transition-all duration-300 ${
-              selectedFile
-                ? "border-primary bg-primary/5"
-                : "border-border bg-background/30 hover:border-primary/60 hover:bg-primary/5"
-            }`}
+          <motion.div
+            initial={reduceMotion ? false : { opacity: 0, y: 14 }}
+            animate={reduceMotion ? undefined : { opacity: 1, y: 0 }}
+            transition={{ duration: 0.5, ease: "easeOut" }}
+            whileHover={reduceMotion ? undefined : { y: -4 }}
+            className="bg-card rounded-2xl border border-border p-6 lg:p-8 shadow-sm"
           >
-            {!selectedFile ? (
-              <div className="flex flex-col items-center justify-center text-center space-y-4">
-                <Upload className="w-20 h-20 text-primary" />
-                <div className="space-y-2">
-                  <p className="text-text-primary font-medium text-lg lg:text-xl">
-                    Drag and drop your resume here
-                  </p>
-                  <p className="text-text-secondary text-sm lg:text-base">or</p>
+            {/* Instructions */}
+            <div className="mb-6">
+              <p className="text-text-primary text-sm lg:text-base mb-2">
+                Upload your resume to help us personalize your interview experience.
+              </p>
+              <p className="text-text-secondary text-xs lg:text-sm">
+                Accepted formats: PDF, Word (.doc, .docx), or PNG (Max size: 10MB)
+              </p>
+            </div>
+
+            {/* Upload Area */}
+            <div
+              onDragOver={handleDragOver}
+              onDrop={handleDrop}
+              className={`border-2 border-dashed rounded-xl p-6 sm:p-8 lg:p-12 transition-all duration-300 ${selectedFile
+                  ? "border-primary bg-primary/5"
+                  : "border-border bg-background/30 hover:border-primary/60 hover:bg-primary/5"
+                }`}
+            >
+              {!selectedFile ? (
+                <div className="flex flex-col items-center justify-center text-center space-y-4">
+                  <Upload className="w-20 h-20 text-primary" />
+                  <div className="space-y-2">
+                    <p className="text-text-primary font-medium text-lg lg:text-xl">
+                      Drag and drop your resume here
+                    </p>
+                    <p className="text-text-secondary text-sm lg:text-base">or</p>
+                  </div>
+                  <input
+                    ref={fileInputRef}
+                    type="file"
+                    accept=".pdf,.doc,.docx,.png"
+                    onChange={handleFileSelect}
+                    className="hidden"
+                    id="file-upload"
+                  />
+                  <label htmlFor="file-upload" className="flex justify-center">
+                    <Button
+                      as="span"
+                      className="cursor-pointer"
+                      onClick={() => fileInputRef.current?.click()}
+                    >
+                      Browse Files
+                    </Button>
+                  </label>
                 </div>
-                <input
-                  ref={fileInputRef}
-                  type="file"
-                  accept=".pdf,.doc,.docx,.png"
-                  onChange={handleFileSelect}
-                  className="hidden"
-                  id="file-upload"
-                />
-                <label htmlFor="file-upload" className="flex justify-center">
-                  <Button
-                    as="span"
-                    className="cursor-pointer"
-                    onClick={() => fileInputRef.current?.click()}
+              ) : (
+                <div className="flex flex-col items-center justify-center text-center space-y-4">
+                  <div className="flex items-center justify-center">
+                    {getFileIcon()}
+                  </div>
+                  <div className="space-y-2">
+                    <p className="text-text-primary font-medium text-lg lg:text-xl break-all px-4">
+                      {selectedFile.name}
+                    </p>
+                    <p className="text-text-secondary text-sm lg:text-base">
+                      {formatFileSize(selectedFile.size)}
+                    </p>
+                  </div>
+                  <button
+                    onClick={handleRemoveFile}
+                    className="inline-flex items-center gap-2 text-red-400 hover:text-red-300 transition-colors text-sm lg:text-base"
                   >
-                    Browse Files
-                  </Button>
-                </label>
-              </div>
-            ) : (
-              <div className="flex flex-col items-center justify-center text-center space-y-4">
-                <div className="flex items-center justify-center">
-                  {getFileIcon()}
+                    <X className="w-4 h-4" />
+                    Remove File
+                  </button>
                 </div>
-                <div className="space-y-2">
-                  <p className="text-text-primary font-medium text-lg lg:text-xl break-all px-4">
-                    {selectedFile.name}
-                  </p>
-                  <p className="text-text-secondary text-sm lg:text-base">
-                    {formatFileSize(selectedFile.size)}
-                  </p>
-                </div>
-                <button
-                  onClick={handleRemoveFile}
-                  className="inline-flex items-center gap-2 text-red-400 hover:text-red-300 transition-colors text-sm lg:text-base"
+              )}
+            </div>
+
+            {/* Error Message */}
+            {errorMessage && (
+              <motion.div
+                initial={{ opacity: 0, y: -10 }}
+                animate={{ opacity: 1, y: 0 }}
+                className="mt-4 flex items-center gap-2 p-3 bg-red-900/20 border border-red-500/30 rounded-lg"
+              >
+                <AlertCircle className="w-5 h-5 text-red-400 flex-shrink-0" />
+                <p className="text-red-400 text-sm">{errorMessage}</p>
+              </motion.div>
+            )}
+
+            {/* Success Message */}
+            {uploadStatus === "success" && (
+              <motion.div
+                initial={{ opacity: 0, y: -10 }}
+                animate={{ opacity: 1, y: 0 }}
+                className="mt-4 flex items-center gap-2 p-3 bg-green-900/20 border border-green-500/30 rounded-lg"
+              >
+                <CheckCircle2 className="w-5 h-5 text-green-400 flex-shrink-0" />
+                <p className="text-green-400 text-sm">
+                  Resume uploaded successfully!
+                </p>
+              </motion.div>
+            )}
+
+            {/* Upload Button */}
+            {selectedFile && (
+              <div className="mt-6 flex justify-center">
+                <Button
+                  onClick={handleUpload}
+                  disabled={isUploading}
+                  className="min-w-[180px]"
                 >
-                  <X className="w-4 h-4" />
-                  Remove File
-                </button>
+                  {isUploading ? "Uploading..." : "Upload Resume"}
+                </Button>
               </div>
             )}
-          </div>
+          </motion.div>
 
-          {/* Error Message */}
-          {errorMessage && (
-            <motion.div
-              initial={{ opacity: 0, y: -10 }}
-              animate={{ opacity: 1, y: 0 }}
-              className="mt-4 flex items-center gap-2 p-3 bg-red-900/20 border border-red-500/30 rounded-lg"
-            >
-              <AlertCircle className="w-5 h-5 text-red-400 flex-shrink-0" />
-              <p className="text-red-400 text-sm">{errorMessage}</p>
-            </motion.div>
-          )}
-
-          {/* Success Message */}
-          {uploadStatus === "success" && (
-            <motion.div
-              initial={{ opacity: 0, y: -10 }}
-              animate={{ opacity: 1, y: 0 }}
-              className="mt-4 flex items-center gap-2 p-3 bg-green-900/20 border border-green-500/30 rounded-lg"
-            >
-              <CheckCircle2 className="w-5 h-5 text-green-400 flex-shrink-0" />
-              <p className="text-green-400 text-sm">
-                Resume uploaded successfully!
-              </p>
-            </motion.div>
-          )}
-
-          {/* Upload Button */}
-          {selectedFile && (
-            <div className="mt-6 flex justify-center">
-              <Button
-                onClick={handleUpload}
-                disabled={isUploading}
-                className="min-w-[180px]"
-              >
-                {isUploading ? "Uploading..." : "Upload Resume"}
-              </Button>
-            </div>
-          )}
-        </motion.div>
-
-        {/* Additional Info */}
-        <motion.div
-          initial={{ opacity: 0 }}
-          animate={{ opacity: 1 }}
-          transition={{ delay: 0.3 }}
-          className="mt-6 bg-card/60 rounded-xl border border-border p-4"
-        >
-          <h3 className="text-text-primary font-medium mb-2 text-sm lg:text-base">
-            Why upload your resume?
-          </h3>
-          <ul className="text-text-secondary text-xs lg:text-sm space-y-1 list-disc list-inside">
-            <li>Personalized interview questions based on your experience</li>
-            <li>Better assessment of your skills and qualifications</li>
-            <li>Improved feedback tailored to your background</li>
-          </ul>
-        </motion.div>
+          {/* Additional Info */}
+          <motion.div
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            transition={{ delay: 0.3 }}
+            className="mt-6 bg-card/60 rounded-xl border border-border p-4"
+          >
+            <h3 className="text-text-primary font-medium mb-2 text-sm lg:text-base">
+              Why upload your resume?
+            </h3>
+            <ul className="text-text-secondary text-xs lg:text-sm space-y-1 list-disc list-inside">
+              <li>Personalized interview questions based on your experience</li>
+              <li>Better assessment of your skills and qualifications</li>
+              <li>Improved feedback tailored to your background</li>
+            </ul>
+          </motion.div>
         </div>
       </AnimatedPage>
     </AppLayout>

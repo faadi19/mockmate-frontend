@@ -1,6 +1,5 @@
 import axios, { AxiosInstance } from 'axios';
-
-const API_BASE_URL = 'http://localhost:5000';
+import { API_BASE_URL } from '../config/api';
 
 export type GoogleAuthMode = 'login' | 'signup';
 
@@ -58,7 +57,7 @@ export const removeUser = (): void => {
  */
 export const getAuthenticatedAxios = (): AxiosInstance => {
   const token = getToken();
-  
+
   const instance = axios.create({
     baseURL: API_BASE_URL,
     headers: {
@@ -124,7 +123,7 @@ export const handleGoogleAuth = async (
 
   // Option A: Simple direct redirect
   window.location.href = `${API_BASE_URL}/api/auth/google/start?${params.toString()}`;
-  
+
   // Option B: Fetch URL from backend then redirect (uncomment if backend requires this)
   // try {
   //   const response = await axios.get(`${API_BASE_URL}/api/auth/google/start`, {

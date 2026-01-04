@@ -13,6 +13,7 @@ import {
 import ContentHeader from "../components/layout/ContentHeader";
 import { ImagesPath } from "../utils/images";
 import axios from "axios";
+import { API_BASE_URL } from "../config/api";
 import AnimatedPage from "../components/ui/AnimatedPage";
 
 const DashboardPage = () => {
@@ -49,10 +50,10 @@ const DashboardPage = () => {
   useEffect(() => {
     const fetchDashboard = async () => {
       if (!token) return; // Don't fetch if no token
-      
+
       try {
         const res = await axios.get(
-          "http://localhost:5000/api/dashboard/summary",
+          `${API_BASE_URL}/api/dashboard/summary`,
           {
             headers: { Authorization: `Bearer ${token}` },
           }
@@ -74,9 +75,9 @@ const DashboardPage = () => {
   useEffect(() => {
     const fetchAITips = async () => {
       if (!token) return; // Don't fetch if no token
-      
+
       try {
-        const res = await fetch("http://localhost:5000/api/dashboard/ai-tips", {
+        const res = await fetch(`${API_BASE_URL}/api/dashboard/ai-tips`, {
           headers: { Authorization: `Bearer ${token}` },
         });
 
@@ -174,15 +175,15 @@ const DashboardPage = () => {
         summary.improvement > 0
           ? `+${summary.improvement}%`
           : summary.improvement < 0
-          ? `${summary.improvement}%`
-          : "0%",
+            ? `${summary.improvement}%`
+            : "0%",
       icon: ImagesPath.skillsIcon,
       colorClass:
         summary.improvement > 0
           ? "text-green-400"
           : summary.improvement < 0
-          ? "text-red-400"
-          : "text-text-primary",
+            ? "text-red-400"
+            : "text-text-primary",
     },
   ];
 
@@ -284,94 +285,93 @@ const DashboardPage = () => {
           transition={{ duration: 0.5, ease: "easeOut" }}
           className="mt-8"
         >
-        <Card className="rounded-xl p-5 lg:p-[2vw]">
-          <CardHeader>
-            <CardTitle className="font-size-24px font-poppins-bold">
-              AI Tips for Your Next Interview
-            </CardTitle>
-          </CardHeader>
+          <Card className="rounded-xl p-5 lg:p-[2vw]">
+            <CardHeader>
+              <CardTitle className="font-size-24px font-poppins-bold">
+                AI Tips for Your Next Interview
+              </CardTitle>
+            </CardHeader>
 
-          <CardContent>
-            {safeAiTips.length === 0 ? (
-              <p className="text-text-secondary">
-                No tips available yet. Complete an interview to receive AI tips.
-              </p>
-            ) : (
-              <div className="space-y-4">
-                {safeAiTips.map((tip, idx) => {
-                  const tipText = tip.tip || tip.text || '';
-                  const example = tip.example || '';
-                  const resources = tip.resources || [];
-                  
-                  return (
-                    <Card key={idx} className="bg-background/60 border border-border rounded-lg">
-                      <CardContent className="p-4">
-                        {/* Tip Text */}
-                        {tipText && (
-                          <div className="mb-3">
-                            <p className="text-text-secondary font-size-18px leading-relaxed">
-                              {tipText}
-                            </p>
-                          </div>
-                        )}
-                        
-                        {/* Example */}
-                        {example && (
-                          <div className="mb-3 pl-4 border-l-2 border-primary/40">
-                            <p className="text-sm font-semibold text-primary mb-1">Example:</p>
-                            <p className="text-text-secondary text-sm italic">{example}</p>
-                          </div>
-                        )}
-                        
-                        {/* Resources */}
-                        {resources.length > 0 && (
-                          <div className="mt-3 pt-3 border-t border-border">
-                            <p className="text-sm font-semibold text-primary mb-2">Resources:</p>
-                            <div className="space-y-2">
-                              {resources.map((resource, resIdx) => {
-                                const resourceType = resource.type?.toLowerCase() || '';
-                                const isBook = resourceType === 'book';
-                                const isWebsite = resourceType === 'website';
-                                const resourceName = resource.title || resource.name || '';
-                                const resourceUrl = resource.url || resource.link || '';
-                                
-                                return (
-                                  <div key={resIdx} className="flex items-center gap-2 text-sm">
-                                    <span className={`px-2 py-1 rounded text-xs font-semibold ${
-                                      isBook 
-                                        ? 'bg-blue-600/20 text-blue-400' 
-                                        : isWebsite 
-                                        ? 'bg-green-600/20 text-green-400' 
-                                        : 'bg-gray-600/20 text-gray-400'
-                                    }`}>
-                                      {isBook ? 'Book' : isWebsite ? 'Website' : 'Resource'}
-                                    </span>
-                                    {resourceUrl ? (
-                                      <a
-                                        href={resourceUrl}
-                                        target="_blank"
-                                        rel="noopener noreferrer"
-                                        className="text-primary hover:text-primary/80 underline"
-                                      >
-                                        {resourceName || resourceUrl}
-                                      </a>
-                                    ) : (
-                                      <span className="text-text-secondary">{resourceName || 'N/A'}</span>
-                                    )}
-                                  </div>
-                                );
-                              })}
+            <CardContent>
+              {safeAiTips.length === 0 ? (
+                <p className="text-text-secondary">
+                  No tips available yet. Complete an interview to receive AI tips.
+                </p>
+              ) : (
+                <div className="space-y-4">
+                  {safeAiTips.map((tip, idx) => {
+                    const tipText = tip.tip || tip.text || '';
+                    const example = tip.example || '';
+                    const resources = tip.resources || [];
+
+                    return (
+                      <Card key={idx} className="bg-background/60 border border-border rounded-lg">
+                        <CardContent className="p-4">
+                          {/* Tip Text */}
+                          {tipText && (
+                            <div className="mb-3">
+                              <p className="text-text-secondary font-size-18px leading-relaxed">
+                                {tipText}
+                              </p>
                             </div>
-                          </div>
-                        )}
-                      </CardContent>
-                    </Card>
-                  );
-                })}
-              </div>
-            )}
-          </CardContent>
-        </Card>
+                          )}
+
+                          {/* Example */}
+                          {example && (
+                            <div className="mb-3 pl-4 border-l-2 border-primary/40">
+                              <p className="text-sm font-semibold text-primary mb-1">Example:</p>
+                              <p className="text-text-secondary text-sm italic">{example}</p>
+                            </div>
+                          )}
+
+                          {/* Resources */}
+                          {resources.length > 0 && (
+                            <div className="mt-3 pt-3 border-t border-border">
+                              <p className="text-sm font-semibold text-primary mb-2">Resources:</p>
+                              <div className="space-y-2">
+                                {resources.map((resource, resIdx) => {
+                                  const resourceType = resource.type?.toLowerCase() || '';
+                                  const isBook = resourceType === 'book';
+                                  const isWebsite = resourceType === 'website';
+                                  const resourceName = resource.title || resource.name || '';
+                                  const resourceUrl = resource.url || resource.link || '';
+
+                                  return (
+                                    <div key={resIdx} className="flex items-center gap-2 text-sm">
+                                      <span className={`px-2 py-1 rounded text-xs font-semibold ${isBook
+                                          ? 'bg-blue-600/20 text-blue-400'
+                                          : isWebsite
+                                            ? 'bg-green-600/20 text-green-400'
+                                            : 'bg-gray-600/20 text-gray-400'
+                                        }`}>
+                                        {isBook ? 'Book' : isWebsite ? 'Website' : 'Resource'}
+                                      </span>
+                                      {resourceUrl ? (
+                                        <a
+                                          href={resourceUrl}
+                                          target="_blank"
+                                          rel="noopener noreferrer"
+                                          className="text-primary hover:text-primary/80 underline"
+                                        >
+                                          {resourceName || resourceUrl}
+                                        </a>
+                                      ) : (
+                                        <span className="text-text-secondary">{resourceName || 'N/A'}</span>
+                                      )}
+                                    </div>
+                                  );
+                                })}
+                              </div>
+                            </div>
+                          )}
+                        </CardContent>
+                      </Card>
+                    );
+                  })}
+                </div>
+              )}
+            </CardContent>
+          </Card>
         </motion.div>
       </AnimatedPage>
     </AppLayout>

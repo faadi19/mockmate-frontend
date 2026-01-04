@@ -8,6 +8,7 @@ import ContentHeader from "../components/layout/ContentHeader";
 import { ImagesPath } from "../utils/images";
 import MediaPipeScoresDisplay from "../components/MediaPipeScoresDisplay";
 import { useCheatingDetection } from "../hooks/useCheatingDetection";
+import { API_BASE_URL } from "../config/api";
 
 interface ChatMessage {
   sender: "ai" | "user";
@@ -39,9 +40,9 @@ async function playTtsForText(text: string, currentAudioRef: any) {
 
   try {
     const token = localStorage.getItem("token");
-    
+
     // Call backend endpoint for text-to-speech
-    const response = await fetch("http://localhost:5000/api/interview/tts", {
+    const response = await fetch(`${API_BASE_URL}/api/interview/tts`, {
       method: "POST",
       headers: {
         "Content-Type": "application/json",
@@ -134,7 +135,7 @@ const InterviewChatPage = () => {
       const video = (window as any).mediaPipeVideoElement || document.querySelector('video');
       const face = (window as any).mediaPipeFaceLandmarks;
       const hands = (window as any).mediaPipeHandLandmarks;
-      
+
       if (video && video !== videoElement) {
         setVideoElement(video);
       }
@@ -193,7 +194,7 @@ const InterviewChatPage = () => {
     if (lastMessage.sender === "ai" && lastMessage.text && lastMessage.questionIndex) {
       // Use sessionId + questionIndex as stable key (not text, as text may change)
       const messageKey = `${sessionId}-${lastMessage.questionIndex}`;
-      
+
       // Check if this message has already been played
       if (lastTtsMessageRef.current === messageKey) {
         return; // Already played this message
@@ -212,7 +213,7 @@ const InterviewChatPage = () => {
           ttsTimeoutRef.current = null;
           return;
         }
-        
+
         const currentLastMessage = chat[chat.length - 1];
         if (
           currentLastMessage.sender === "ai" &&
@@ -273,7 +274,7 @@ const InterviewChatPage = () => {
     };
 
     window.addEventListener("beforeunload", handleBeforeUnload);
-    
+
     return () => {
       window.removeEventListener("beforeunload", handleBeforeUnload);
       if (currentAudioRef.current) {
@@ -305,14 +306,14 @@ const InterviewChatPage = () => {
     try {
       setSessionLoading(true);
       const token = localStorage.getItem("token");
-      
+
       if (!token) {
         navigate("/login");
         return;
       }
 
       const response = await fetch(
-        `http://localhost:5000/api/interview/session/${sessionIdToLoad}`,
+        `${API_BASE_URL}/api/interview/session/${sessionIdToLoad}`,
         {
           method: "GET",
           headers: {
@@ -417,7 +418,7 @@ const InterviewChatPage = () => {
       if (existingSessionId) {
         // ⭐ VERIFY THAT SESSION BELONGS TO CURRENT SETUP ID
         const savedSetupId = localStorage.getItem(`interviewSetupId_${existingSessionId}`);
-        
+
         // If setupId doesn't match, clear old session and start new
         if (savedSetupId !== setupId) {
           localStorage.removeItem("interviewSessionId");
@@ -457,7 +458,7 @@ const InterviewChatPage = () => {
       // ⭐ OTHERWISE, START A NEW INTERVIEW
       try {
         setLoading(true);
-        const res = await fetch("http://localhost:5000/api/interview/start", {
+        const res = await fetch(`${API_BASE_URL}/api/interview/start`, {
           method: "POST",
           headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` },
           body: JSON.stringify({ setupId }),
@@ -519,7 +520,7 @@ const InterviewChatPage = () => {
     try {
       setLoading(true);
 
-      const res = await fetch("http://localhost:5000/api/interview/answer", {
+      const res = await fetch(`${API_BASE_URL}/api/interview/answer`, {
         method: "POST",
         headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` },
         body: JSON.stringify({ sessionId, answer }),
@@ -568,17 +569,17 @@ const InterviewChatPage = () => {
             videos.forEach((v) => {
               try {
                 // Pause and stop tracks
-                try { (v as HTMLVideoElement).pause(); } catch (_) {}
+                try { (v as HTMLVideoElement).pause(); } catch (_) { }
                 const srcObj: any = (v as any).srcObject;
                 if (srcObj && typeof srcObj.getTracks === 'function') {
                   srcObj.getTracks().forEach((t: MediaStreamTrack) => {
-                    try { t.stop(); } catch (_) {}
+                    try { t.stop(); } catch (_) { }
                   });
                   console.log('Stopped MediaStream tracks on a <video> element');
                 }
                 // Remove hidden video element if it's the one created by the hook
-                try { if (v.parentNode) v.parentNode.removeChild(v); } catch (_) {}
-              } catch (_) {}
+                try { if (v.parentNode) v.parentNode.removeChild(v); } catch (_) { }
+              } catch (_) { }
             });
           } catch (err) {
             console.error('Error while stopping video elements:', err);
@@ -650,63 +651,61 @@ const InterviewChatPage = () => {
             ref={chatContainerRef}
             className="flex-1 overflow-y-auto flex flex-col gap-4 p-4"
           >
-          {sessionLoading && (
-            <div className="flex items-center justify-center py-8">
-              <p className="text-gray-400">Loading interview session...</p>
-            </div>
-          )}
+            {sessionLoading && (
+              <div className="flex items-center justify-center py-8">
+                <p className="text-gray-400">Loading interview session...</p>
+              </div>
+            )}
 
-          {!sessionLoading && loading && (
-            <p className="text-gray-400">Processing...</p>
-          )}
+            {!sessionLoading && loading && (
+              <p className="text-gray-400">Processing...</p>
+            )}
 
-          {!sessionLoading && chat.map((msg, idx) => (
-            <motion.div
-              key={idx}
-              initial={{ opacity: 0, y: 10 }}
-              animate={{ opacity: 1, y: 0 }}
-              className={`flex ${msg.sender === "ai" ? "justify-start" : "justify-end"}`}
-            >
-              <div
-                className={`text-white max-w-[80%] lg:max-w-[60%] rounded-2xl lg:rounded-[1.5vw] flex gap-2 lg:gap-[0.5vw] ${
-                  msg.sender === "user"
+            {!sessionLoading && chat.map((msg, idx) => (
+              <motion.div
+                key={idx}
+                initial={{ opacity: 0, y: 10 }}
+                animate={{ opacity: 1, y: 0 }}
+                className={`flex ${msg.sender === "ai" ? "justify-start" : "justify-end"}`}
+              >
+                <div
+                  className={`text-white max-w-[80%] lg:max-w-[60%] rounded-2xl lg:rounded-[1.5vw] flex gap-2 lg:gap-[0.5vw] ${msg.sender === "user"
                     ? " flex-row-reverse"
                     : ""
-                }`}
-              >
-                <img
-                  src={
-                    msg.sender === "ai"
-                      ? ImagesPath.aiIcon
-                      : ImagesPath.userIcon
-                  }
-                  alt={msg.sender === "ai" ? "ai assistant" : "user"}
-                  className={`object-contain w-4 h-4 lg:w-[2.5vw] lg:h-[2.5vw]`}
-                />
-                <div
-                  className={`font-size-20px font-poppins-regular rounded-2xl lg:rounded-[1.5vw] px-4 py-3 ${
-                    msg.sender === "ai"
+                    }`}
+                >
+                  <img
+                    src={
+                      msg.sender === "ai"
+                        ? ImagesPath.aiIcon
+                        : ImagesPath.userIcon
+                    }
+                    alt={msg.sender === "ai" ? "ai assistant" : "user"}
+                    className={`object-contain w-4 h-4 lg:w-[2.5vw] lg:h-[2.5vw]`}
+                  />
+                  <div
+                    className={`font-size-20px font-poppins-regular rounded-2xl lg:rounded-[1.5vw] px-4 py-3 ${msg.sender === "ai"
                       ? "bg-primary text-white"
                       : "bg-card border border-border text-text-primary"
-                  }`}
-                >
-                  {msg.text}
+                      }`}
+                  >
+                    {msg.text}
 
-                  {msg.sender === "ai" && msg.questionIndex && totalQuestions && (
-                    <div className="text-xs text-gray-300 mt-1">
-                      Question {msg.questionIndex} of {totalQuestions}
-                    </div>
-                  )}
+                    {msg.sender === "ai" && msg.questionIndex && totalQuestions && (
+                      <div className="text-xs text-gray-300 mt-1">
+                        Question {msg.questionIndex} of {totalQuestions}
+                      </div>
+                    )}
+                  </div>
                 </div>
-              </div>
-            </motion.div>
-          ))}
+              </motion.div>
+            ))}
 
-          {!sessionLoading && chat.length === 0 && !loading && (
-            <div className="flex items-center justify-center py-8">
-              <p className="text-gray-400">No messages yet. Waiting for question...</p>
-            </div>
-          )}
+            {!sessionLoading && chat.length === 0 && !loading && (
+              <div className="flex items-center justify-center py-8">
+                <p className="text-gray-400">No messages yet. Waiting for question...</p>
+              </div>
+            )}
           </div>
 
           <div className="pt-4 border-t border-gray-800 px-4 pb-4">
@@ -748,7 +747,7 @@ const InterviewChatPage = () => {
         {!sessionLoading && sessionId && (
           <div className="lg:w-80 lg:border-l lg:border-gray-800 lg:pl-4 lg:pr-4 lg:pt-4 lg:pb-4 w-full pt-4 space-y-4">
             <MediaPipeScoresDisplay enabled={mediaPipeEnabled} showUI={true} sessionId={sessionId} />
-            
+
             {/* MediaPipe-Based Cheating Detection */}
             <div className="bg-card border border-border rounded-lg p-3 space-y-2 text-xs">
               <div className="flex items-center justify-between mb-2">

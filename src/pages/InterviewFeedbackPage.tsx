@@ -1,4 +1,5 @@
 import { useNavigate, useLocation } from "react-router-dom";
+import { API_BASE_URL } from "../config/api";
 import { motion } from "framer-motion";
 import AppLayout from "../components/layout/AppLayout";
 import ContentHeader from "../components/layout/ContentHeader";
@@ -51,7 +52,7 @@ const InterviewFeedbackPage = () => {
         setError(null);
 
         // Fetching interview feedback from backend
-        const res = await fetch("http://localhost:5000/api/interview/finish", {
+        const res = await fetch(`${API_BASE_URL}/api/interview/finish`, {
           method: "POST",
           headers: {
             "Content-Type": "application/json",
@@ -174,21 +175,21 @@ const InterviewFeedbackPage = () => {
 
                   {/* ===== GLOBAL SCORES ===== */}
                   <div className="grid grid-cols-2 gap-4 max-w-[80%] mx-auto mb-8">
-                <ScoreBox
-                  value={evaluation.technicalAccuracy}
-                  label="Technical Accuracy"
-                  color="text-primary"
-                />
-                <ScoreBox
-                  value={evaluation.completeness}
-                  label="Completeness"
-                  color="text-green-400"
-                />
-                <ScoreBox
-                  value={evaluation.conciseness}
-                  label="Conciseness"
-                  color="text-yellow-400"
-                />
+                    <ScoreBox
+                      value={evaluation.technicalAccuracy}
+                      label="Technical Accuracy"
+                      color="text-primary"
+                    />
+                    <ScoreBox
+                      value={evaluation.completeness}
+                      label="Completeness"
+                      color="text-green-400"
+                    />
+                    <ScoreBox
+                      value={evaluation.conciseness}
+                      label="Conciseness"
+                      color="text-yellow-400"
+                    />
                     <ScoreBox
                       value={evaluation.problemSolving}
                       label="Problem Solving"
@@ -198,9 +199,9 @@ const InterviewFeedbackPage = () => {
 
                   {/* ===== TOTAL SCORE ===== */}
                   <div className="max-w-[80%] mx-auto bg-background/60 border border-border p-4 rounded-xl mb-10">
-                <p className="font-size-32px font-poppins-bold text-primary">
-                  Total Marks: {evaluation.totalScore}
-                </p>
+                    <p className="font-size-32px font-poppins-bold text-primary">
+                      Total Marks: {evaluation.totalScore}
+                    </p>
                     <p className="font-size-18px text-text-secondary">
                       Overall Percentage: {evaluation.overallPercentage}%
                     </p>

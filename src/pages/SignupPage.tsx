@@ -6,6 +6,7 @@ import { ImagesPath } from "../utils/images";
 import Button from "../components/ui/Button";
 import { handleGoogleAuth } from "../utils/auth";
 import axios from "axios";
+import { API_BASE_URL } from "../config/api";
 
 const SignupPage = () => {
   const navigate = useNavigate();
@@ -90,9 +91,9 @@ const SignupPage = () => {
       const age = today.getFullYear() - birthDate.getFullYear();
       const monthDiff = today.getMonth() - birthDate.getMonth();
       const dayDiff = today.getDate() - birthDate.getDate();
-      
+
       const actualAge = monthDiff < 0 || (monthDiff === 0 && dayDiff < 0) ? age - 1 : age;
-      
+
       if (actualAge < 15) {
         newErrors.dob = "You must be at least 15 years old to sign up";
         isValid = false;
@@ -114,45 +115,45 @@ const SignupPage = () => {
   };
 
   const handleSubmit = async (e: React.FormEvent) => {
-  e.preventDefault();
-  if (!validateForm()) return;
+    e.preventDefault();
+    if (!validateForm()) return;
 
-  setIsLoading(true);
+    setIsLoading(true);
 
-  try {
-    const response = await axios.post("http://localhost:5000/api/auth/register", {
-      name: fullName,
-      email,
-      password,
-      dob,
-      citizenship,
-    }, {
-      headers: { "Content-Type": "application/json" }
-    });
+    try {
+      const response = await axios.post(`${API_BASE_URL}/api/auth/register`, {
+        name: fullName,
+        email,
+        password,
+        dob,
+        citizenship,
+      }, {
+        headers: { "Content-Type": "application/json" }
+      });
 
-    console.log("Registered user:", response.data);
+      console.log("Registered user:", response.data);
 
-    // Optionally save token to localStorage
-    localStorage.setItem("token", response.data.token);
+      // Optionally save token to localStorage
+      localStorage.setItem("token", response.data.token);
 
-    // Redirect to dashboard
-    navigate("/dashboard");
-  } catch (error: any) {
-    console.error("Signup failed:", error.response?.data || error.message);
-    setErrors((prev) => ({
-      ...prev,
-      email: error.response?.data?.message || "Signup failed",
-    }));
-  } finally {
-    setIsLoading(false);
-  }
-};
+      // Redirect to dashboard
+      navigate("/dashboard");
+    } catch (error: any) {
+      console.error("Signup failed:", error.response?.data || error.message);
+      setErrors((prev) => ({
+        ...prev,
+        email: error.response?.data?.message || "Signup failed",
+      }));
+    } finally {
+      setIsLoading(false);
+    }
+  };
 
   return (
     <div className="relative bg-background">
       <div className="w-[120vw] absolute top-[-30vh] left-[-5vw] h-[40vh] bg-gradient-to-r from-primary/80 to-secondary/80 rotate-[-6deg] custom-shadow"></div>
       <div className="min-h-screen flex relative z-10">
-        
+
         {/* Left Side */}
         <div className="hidden lg:flex lg:w-1/2 items-center justify-center p-8">
           <div className="w-full max-w-md flex items-center justify-center relative">
