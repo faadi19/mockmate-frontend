@@ -11,6 +11,8 @@ import { ImagesPath } from "../utils/images";
 import CustomDropdown, { Options } from "../components/ui/CustomDropdown";
 import { Card, CardContent } from "../components/ui/Card";
 import AnimatedPage from "../components/ui/AnimatedPage";
+import { useFaceVerification } from "../hooks/useFaceVerification";
+import { useRef } from "react";
 
 const InterviewSetupPage = () => {
   const navigate = useNavigate();
@@ -24,6 +26,12 @@ const InterviewSetupPage = () => {
   const [isValidRole, setIsValidRole] = useState<boolean | null>(null);
   const [loadingJD, setLoadingJD] = useState(false);
   const [setupId, setSetupId] = useState<string | null>(null);
+
+  // Face Verification State
+  const [showFaceVerification, setShowFaceVerification] = useState(false);
+  const [cameraStream, setCameraStream] = useState<MediaStream | null>(null);
+  const videoRef = useRef<HTMLVideoElement | null>(null);
+  const [localError, setLocalError] = useState<string | null>(null);
 
   const educationOptions = [
     {
@@ -230,6 +238,40 @@ const InterviewSetupPage = () => {
     }
   };
 
+  // Sync camera stream with video element
+  useEffect(() => {
+    if (cameraStream && videoRef.current) {
+      videoRef.current.srcObject = cameraStream;
+    }
+  }, [cameraStream, showFaceVerification]);
+
+  // Start Camera for Face Verification
+  const startCamera = async () => {
+    try {
+      const stream = await navigator.mediaDevices.getUserMedia({ video: true });
+      setCameraStream(stream);
+      setLocalError(null);
+    } catch (err: any) {
+      console.error("Error accessing camera:", err);
+      setLocalError("Could not access camera. Please ensure permissions are granted.");
+    }
+  };
+
+  // Stop Camera
+  const stopCamera = () => {
+    if (cameraStream) {
+      cameraStream.getTracks().forEach((track) => track.stop());
+      setCameraStream(null);
+    }
+  };
+
+  // Initial Face Verification Check
+  const { performVerification, isVerifying, error: faceApiError } = useFaceVerification({
+    enabled: false, // We'll trigger it manually
+    videoElement: videoRef.current,
+  });
+
+
   // Handle Start Interview button - actually start the interview
   const handleStartInterview = async () => {
     if (!setupId) return;
@@ -356,23 +398,113 @@ const InterviewSetupPage = () => {
               <p className="text-sm text-red-400">{error}</p>
             )}
 
-            {/* Start Interview Button */}
-            <Button
-              onClick={handleStartInterview}
-              className="w-full flex items-center justify-center gap-2"
-              disabled={loading}
-              loading={loading}
-              icons={
-                !loading ? (
-                  <ArrowRight className="size-5 lg:size-[1.5vw] text-text-secondary" />
-                ) : undefined
-              }
-              iconsPosition="right"
-              rounded
-              size="lg"
-            >
-              {loading ? "Starting Interview..." : "Start Interview"}
-            </Button>
+            {/* Start Interview / Verify Face Button */}
+            {!showFaceVerification ? (
+              <Button
+                onClick={() => {
+                  setShowFaceVerification(true);
+                  startCamera();
+                }}
+                className="w-full flex items-center justify-center gap-2"
+                disabled={loading}
+                loading={loading}
+                icons={
+                  !loading ? (
+                    <ArrowRight className="size-5 lg:size-[1.5vw] text-text-secondary" />
+                  ) : undefined
+                }
+                iconsPosition="right"
+                rounded
+                size="lg"
+              >
+                {loading ? "Preparing..." : "Proceed to Identity Verification"}
+              </Button>
+            ) : (
+              <div className="flex flex-col gap-4 w-full">
+                <Card className="bg-background/60 border border-border rounded-lg overflow-hidden">
+                  <CardContent className="p-0 relative aspect-video bg-black flex items-center justify-center">
+                    <video
+                      ref={videoRef}
+                      autoPlay
+                      playsInline
+                      muted
+                      className="w-full h-full object-cover"
+                    />
+                    {!cameraStream && !localError && (
+                      <p className="text-text-secondary absolute">Initializing camera...</p>
+                    )}
+                    {localError && !cameraStream && (
+                      <p className="text-red-400 absolute px-4 text-center">{localError}</p>
+                    )}
+                    {isVerifying && (
+                      <div className="absolute inset-0 bg-black/40 flex items-center justify-center">
+                        <div className="flex flex-col items-center gap-2">
+                          <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary"></div>
+                          <p className="text-white text-sm font-semibold">Verifying Identity...</p>
+                        </div>
+                      </div>
+                    )}
+                  </CardContent>
+                </Card>
+
+                {localError && cameraStream && (
+                  <div className="mb-4 p-3 bg-red-900/20 border border-red-500/30 rounded-lg animate-in fade-in slide-in-from-top-2 duration-300 mt-2">
+                    <p className="text-sm text-red-400 text-center font-medium">
+                      {localError}
+                    </p>
+                  </div>
+                )}
+
+                {faceApiError && <p className="text-sm text-red-400 text-center">{faceApiError}</p>}
+
+                <div className="flex gap-4">
+                  <Button
+                    onClick={() => {
+                      setShowFaceVerification(false);
+                      stopCamera();
+                    }}
+                    variant="outline"
+                    className="flex-1"
+                    disabled={loading || isVerifying}
+                  >
+                    Back
+                  </Button>
+                  <Button
+                    onClick={async () => {
+                      if (!videoRef.current) return;
+                      setLoading(true);
+                      setLocalError(null); // Clear previous errors on new attempt
+                      try {
+                        const status = await performVerification();
+
+                        if (status === 'SUCCESS') {
+                          // Successful verification - proceed to start interview session
+                          await handleStartInterview();
+                          stopCamera();
+                        } else if (status === 'NO_FACE') {
+                          setLocalError("Face not detected. Please ensure you are clearly visible in the camera frame.");
+                        } else if (status === 'MULTI_FACE') {
+                          setLocalError("Multiple faces detected. Please ensure only you are present in the frame.");
+                        } else if (status === 'WRONG_FACE') {
+                          setLocalError("Identity Mismatch: The person on camera does not match the registered candidate. Please ensure the correct candidate is present.");
+                        } else {
+                          setLocalError("An unexpected error occurred during verification. Please try again.");
+                        }
+                      } catch (e: any) {
+                        setLocalError(e.message || "Verification failed");
+                      } finally {
+                        setLoading(false);
+                      }
+                    }}
+                    className="flex-1"
+                    disabled={loading || isVerifying || !cameraStream}
+                    loading={loading}
+                  >
+                    Verify & Start Interview
+                  </Button>
+                </div>
+              </div>
+            )}
           </div>
         </AnimatedPage>
       </AppLayout>

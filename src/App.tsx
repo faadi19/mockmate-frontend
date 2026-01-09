@@ -21,8 +21,22 @@ import ReportsPage from './pages/ReportsPage';
 import ReportDetailPage from './pages/ReportDetailPage';
 import ReportsComparePage from './pages/ReportsComparePage';
 import PrivateRoute from './components/PrivateRoute';
+import AdminRoute from './components/AdminRoute';
 import ErrorBoundary from './components/ErrorBoundary';
 import ToastHost from './components/ui/ToastHost';
+
+// Admin Pages
+import AdminDashboardPage from './pages/AdminDashboardPage';
+import UserManagementPage from './pages/UserManagementPage';
+import UserDetailPage from './pages/UserDetailPage';
+import InterviewManagementPage from './pages/InterviewManagementPage';
+import InterviewDetailPage from './pages/InterviewDetailPage';
+import ViolationsPanel from './pages/ViolationsPanel';
+import ReportsManagementPage from './pages/ReportsManagementPage';
+import AiSettingsPage from './pages/AiSettingsPage';
+import ContentManagementPage from './pages/ContentManagementPage';
+
+import AdminLoginPage from './pages/AdminLoginPage';
 
 function App() {
   return (
@@ -34,10 +48,13 @@ function App() {
             <Route path="/" element={<HomePage />} />
             <Route path="/login" element={<LoginPage />} />
             <Route path="/signup" element={<SignupPage />} />
+            <Route path="/admin/login" element={<AdminLoginPage />} />
             <Route path="/forgot-password" element={<ForgotPasswordPage />} />
             <Route path="/verify-otp" element={<VerifyOtpPage />} />
             <Route path="/reset-password" element={<ResetPasswordPage />} />
             <Route path="/auth/google/callback" element={<GoogleCallbackPage />} />
+
+            {/* User Private Routes */}
             <Route path="/dashboard" element={
               <PrivateRoute>
                 <ErrorBoundary>
@@ -99,6 +116,53 @@ function App() {
               <PrivateRoute>
                 <ReportDetailPage />
               </PrivateRoute>
+            } />
+
+            {/* Admin Private Routes */}
+            <Route path="/admin/dashboard" element={
+              <AdminRoute>
+                <AdminDashboardPage />
+              </AdminRoute>
+            } />
+            <Route path="/admin/users" element={
+              <AdminRoute>
+                <UserManagementPage />
+              </AdminRoute>
+            } />
+            <Route path="/admin/users/:id" element={
+              <AdminRoute>
+                <UserDetailPage />
+              </AdminRoute>
+            } />
+            <Route path="/admin/interviews" element={
+              <AdminRoute>
+                <InterviewManagementPage />
+              </AdminRoute>
+            } />
+            <Route path="/admin/interviews/:id" element={
+              <AdminRoute>
+                <InterviewDetailPage />
+              </AdminRoute>
+            } />
+            <Route path="/admin/proctoring" element={
+              <AdminRoute>
+                <ViolationsPanel />
+              </AdminRoute>
+            } />
+            <Route path="/admin/reports" element={
+              <AdminRoute>
+                <ReportsManagementPage />
+              </AdminRoute>
+            } />
+            <Route path="/admin/settings" element={
+              <AdminRoute>
+                <AiSettingsPage />
+              </AdminRoute>
+            } />
+            <Route path="/admin/content" element={
+              <AdminRoute>
+                <ContentManagementPage />
+              </AdminRoute>
             } />
           </Routes>
         </Router>

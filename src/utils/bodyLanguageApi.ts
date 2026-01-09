@@ -13,6 +13,7 @@ export interface BodyLanguageData {
   dominantExpression?: string; // Most common expression over time
   sampleCount: number;
   timestamp: number;
+  questionIndex: number;
 }
 
 /**

@@ -5,6 +5,8 @@ interface MediaPipeScoresDisplayProps {
   enabled?: boolean;
   showUI?: boolean; // If false, scores only logged to console
   sessionId?: string; // Interview session ID for saving data to backend
+  isSampling?: boolean;
+  questionIndex?: number;
 }
 
 /**
@@ -16,9 +18,11 @@ export default function MediaPipeScoresDisplay({
   enabled = true,
   showUI = false,
   sessionId,
+  isSampling = false,
+  questionIndex = 0,
 }: MediaPipeScoresDisplayProps) {
-  const { scores, aggregatedScores, isInitialized, error, saveFinalData, stopAnalysis, videoElement, faceLandmarks, handLandmarks } = useMediaPipeAnalysis(enabled, sessionId);
-  
+  const { scores, aggregatedScores, isInitialized, error, saveFinalData, stopAnalysis, videoElement, faceLandmarks, handLandmarks } = useMediaPipeAnalysis(enabled, sessionId, isSampling, questionIndex);
+
   // Expose landmarks globally for cheating detection
   useEffect(() => {
     if (typeof window !== 'undefined') {
@@ -32,7 +36,7 @@ export default function MediaPipeScoresDisplay({
       }
     };
   }, [faceLandmarks, handLandmarks]);
-  
+
   // Expose video element globally for YOLO detection
   useEffect(() => {
     if (videoElement && typeof window !== 'undefined') {
@@ -44,7 +48,7 @@ export default function MediaPipeScoresDisplay({
       }
     };
   }, [videoElement]);
-  
+
   // Expose saveFinalData to parent component via ref or return it
   // For now, we'll expose it via a useEffect that can be called by parent
   useEffect(() => {
@@ -129,7 +133,7 @@ export default function MediaPipeScoresDisplay({
               </div>
             </div>
           )}
-          
+
           {/* No Face Detected Message - Only show when face is definitely NOT detected */}
           {!scores.faceDetected && scores.eyeContact === 0 && scores.engagement === 0 && scores.attention === 0 && (
             <div className="bg-yellow-900/20 border border-yellow-700/30 rounded px-3 py-2 mb-3">
@@ -156,9 +160,9 @@ export default function MediaPipeScoresDisplay({
               {aggregatedScores.dominantExpression && aggregatedScores.faceDetected && (
                 <div className="mb-2 flex items-center justify-between">
                   <span className="text-xs text-text-secondary">Dominant Expression</span>
-                  <ExpressionBadge 
-                    expression={aggregatedScores.dominantExpression} 
-                    confidence={aggregatedScores.expressionConfidence} 
+                  <ExpressionBadge
+                    expression={aggregatedScores.dominantExpression}
+                    confidence={aggregatedScores.expressionConfidence}
                   />
                 </div>
               )}

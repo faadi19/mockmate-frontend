@@ -7,6 +7,10 @@ import Button from "../components/ui/Button";
 import { handleGoogleAuth } from "../utils/auth";
 import axios from "axios";
 import { API_BASE_URL } from "../config/api";
+import { useEffect, useRef } from "react";
+import { useFaceVerification } from "../hooks/useFaceVerification";
+
+declare const faceapi: any;
 
 const SignupPage = () => {
   const navigate = useNavigate();
@@ -19,6 +23,13 @@ const SignupPage = () => {
   const [dob, setDob] = useState("");
   const [citizenship, setCitizenship] = useState("");
   const [agreeToTerms, setAgreeToTerms] = useState(false);
+
+  // Face Capture State
+  const [faceEmbedding, setFaceEmbedding] = useState<number[] | null>(null);
+  const [showCamera, setShowCamera] = useState(false);
+  const [cameraStream, setCameraStream] = useState<MediaStream | null>(null);
+  const videoRef = useRef<HTMLVideoElement | null>(null);
+  const [faceCaptureError, setFaceCaptureError] = useState<string | null>(null);
 
   // Calculate maximum date (15 years ago from today)
   const getMaxDate = () => {
@@ -110,8 +121,75 @@ const SignupPage = () => {
       isValid = false;
     }
 
+    if (!faceEmbedding) {
+      newErrors.terms = "Identity registration (face capture) is required";
+      isValid = false;
+    }
+
     setErrors(newErrors);
     return isValid;
+  };
+
+  // Sync camera stream with video element
+  useEffect(() => {
+    if (cameraStream && videoRef.current) {
+      videoRef.current.srcObject = cameraStream;
+    }
+  }, [cameraStream, showCamera]);
+
+  const startCamera = async () => {
+    try {
+      const stream = await navigator.mediaDevices.getUserMedia({ video: true });
+      setCameraStream(stream);
+      setShowCamera(true);
+      setFaceCaptureError(null);
+    } catch (err) {
+      setFaceCaptureError("Could not access camera. Please allow permissions.");
+    }
+  };
+
+  const stopCamera = () => {
+    if (cameraStream) {
+      cameraStream.getTracks().forEach(track => track.stop());
+      setCameraStream(null);
+    }
+    setShowCamera(false);
+  };
+
+  const { isVerifying } = useFaceVerification({
+    enabled: false,
+    videoElement: videoRef.current,
+  });
+
+  const handleCaptureFace = async () => {
+    if (!videoRef.current || typeof faceapi === 'undefined') return;
+
+    setFaceCaptureError(null);
+    try {
+      // Use detectAllFaces to check for multiple people during registration
+      const detections = await faceapi
+        .detectAllFaces(videoRef.current)
+        .withFaceLandmarks()
+        .withFaceDescriptors();
+
+      if (detections.length === 0) {
+        setFaceCaptureError("Could not detect face. Please ensure your face is clearly visible.");
+        return;
+      }
+
+      if (detections.length > 1) {
+        setFaceCaptureError("Multiple individuals detected. Please ensure only you are present in the frame during registration.");
+        return;
+      }
+
+      // Exactly one face detected
+      const embedding = detections[0].descriptor;
+      setFaceEmbedding(Array.from(embedding));
+      stopCamera();
+    } catch (err) {
+      console.error("Capture error:", err);
+      setFaceCaptureError("Face capture failed. Please try again.");
+    }
   };
 
   const handleSubmit = async (e: React.FormEvent) => {
@@ -127,6 +205,7 @@ const SignupPage = () => {
         password,
         dob,
         citizenship,
+        faceEmbedding,
       }, {
         headers: { "Content-Type": "application/json" }
       });
@@ -266,6 +345,80 @@ const SignupPage = () => {
                 onChange={(e) => setCitizenship(e.target.value)}
                 error={errors.citizenship}
               />
+
+              {/* FACE CAPTURE SECTION */}
+              <div className="space-y-2">
+                <label className="text-text-secondary text-sm font-poppins-medium">
+                  Identity Registration (Required)
+                </label>
+
+                {!faceEmbedding ? (
+                  !showCamera ? (
+                    <Button
+                      type="button"
+                      variant="outline"
+                      className="w-full border-dashed"
+                      onClick={startCamera}
+                    >
+                      Capture Face for Identity Verification
+                    </Button>
+                  ) : (
+                    <div className="flex flex-col gap-2">
+                      <div className="relative aspect-video bg-black rounded-lg overflow-hidden">
+                        <video
+                          ref={videoRef}
+                          autoPlay
+                          playsInline
+                          muted
+                          className="w-full h-full object-cover"
+                        />
+                        {isVerifying && (
+                          <div className="absolute inset-0 bg-black/40 flex items-center justify-center">
+                            <p className="text-white text-sm">Processing...</p>
+                          </div>
+                        )}
+                      </div>
+                      <div className="flex gap-2">
+                        <Button
+                          type="button"
+                          variant="outline"
+                          className="flex-1"
+                          onClick={stopCamera}
+                        >
+                          Cancel
+                        </Button>
+                        <Button
+                          type="button"
+                          className="flex-1"
+                          onClick={handleCaptureFace}
+                          disabled={isVerifying}
+                        >
+                          Capture
+                        </Button>
+                      </div>
+                    </div>
+                  )
+                ) : (
+                  <div className="flex items-center justify-between p-3 bg-green-900/10 border border-green-500/30 rounded-lg">
+                    <span className="text-green-400 text-sm font-medium flex items-center gap-2">
+                      <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M5 13l4 4L19 7" />
+                      </svg>
+                      Face Identity Registered
+                    </span>
+                    <button
+                      type="button"
+                      className="text-text-secondary hover:text-primary text-xs underline"
+                      onClick={() => { setFaceEmbedding(null); startCamera(); }}
+                    >
+                      Recapture
+                    </button>
+                  </div>
+                )}
+                {faceCaptureError && (
+                  <p className="text-xs text-red-500">{faceCaptureError}</p>
+                )}
+              </div>
 
               {/* TERMS */}
               <div className="flex items-start">

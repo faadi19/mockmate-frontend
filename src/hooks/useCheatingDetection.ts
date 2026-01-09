@@ -455,25 +455,28 @@ export function useCheatingDetection(config: UseCheatingDetectionConfig): {
     }
 
     // Determine if behavioral cheating is detected
-    const behavioralCheatingDetected = behaviorScore >= BEHAVIOR_THRESHOLD;
+    // CHANGED: Behavioral issues are now strictly "Distracted", never "Cheating" for termination purposes.
+    const behavioralCheatingDetected = false;
 
     // Update result
     setResult((prev) => {
-      const phoneDetected = prev.phoneDetected; // Keep existing phone detection result
-      const cheatingDetected = phoneDetected || behavioralCheatingDetected;
+      const phoneDetected = prev.phoneDetected;
+      // CHANGED: Only phone triggers "Cheating"
+      const cheatingDetected = phoneDetected;
 
       // Determine status
       let status: "Focused" | "Distracted" | "Cheating" = "Focused";
       if (cheatingDetected) {
         status = "Cheating";
       } else if (behaviorScore > 20) {
+        // High behavior score now maps to Distracted, not Cheating
         status = "Distracted";
       }
 
       return {
         cheatingDetected,
         phoneDetected,
-        behavioralCheatingDetected,
+        behavioralCheatingDetected: behaviorScore >= BEHAVIOR_THRESHOLD, // Keep track of it but don't flag as cheatingDetected
         behaviorScore,
         scores: {
           gazeDown: currentGazeDownDurationRef.current,
@@ -481,7 +484,7 @@ export function useCheatingDetection(config: UseCheatingDetectionConfig): {
           handNearFace: isHandNearFaceContinuous,
           faceOutOfFrame: isFaceOutOfFrame,
           behaviorScore,
-          behavioralCheatingDetected,
+          behavioralCheatingDetected: behaviorScore >= BEHAVIOR_THRESHOLD,
         },
         status,
         error: null,

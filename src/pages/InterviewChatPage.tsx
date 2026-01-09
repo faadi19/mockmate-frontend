@@ -1,4 +1,4 @@
-import { useState, useRef, useEffect } from "react";
+import { useState, useRef, useEffect, useCallback } from "react";
 import { useNavigate, useLocation, useSearchParams } from "react-router-dom";
 import { motion } from "framer-motion";
 import { Send } from "lucide-react";
@@ -8,7 +8,10 @@ import ContentHeader from "../components/layout/ContentHeader";
 import { ImagesPath } from "../utils/images";
 import MediaPipeScoresDisplay from "../components/MediaPipeScoresDisplay";
 import { useCheatingDetection } from "../hooks/useCheatingDetection";
+import { useFaceVerification } from "../hooks/useFaceVerification";
 import { API_BASE_URL } from "../config/api";
+import { reportViolation } from "../utils/faceVerification";
+import { Camera, AlertCircle, Users, UserX, Clock } from "lucide-react";
 
 interface ChatMessage {
   sender: "ai" | "user";
@@ -106,8 +109,16 @@ const InterviewChatPage = () => {
 
   const [input, setInput] = useState("");
   const [loading, setLoading] = useState(false);
-  const [error, setError] = useState<string | null>(null);
   const [sessionLoading, setSessionLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
+
+  // Monitoring States
+  const [rule1Countdown, setRule1Countdown] = useState<number | null>(null);
+  const [rule1Stage, setRule1Stage] = useState<1 | 2 | null>(null); // 1: Yellow, 2: Red
+  const [rule3Countdown, setRule3Countdown] = useState<number | null>(null);
+  const [isInterviewTerminated, setIsInterviewTerminated] = useState(false);
+  const [violationType, setViolationType] = useState<string | null>(null);
+
   const textareaRef = useRef<HTMLTextAreaElement>(null);
 
   const chatContainerRef = useRef<HTMLDivElement>(null);
@@ -128,6 +139,7 @@ const InterviewChatPage = () => {
   const [videoElement, setVideoElement] = useState<HTMLVideoElement | null>(null);
   const [faceLandmarks, setFaceLandmarks] = useState<any[] | null>(null);
   const [handLandmarks, setHandLandmarks] = useState<any[][] | null>(null);
+  const [isSampling, setIsSampling] = useState<boolean>(false);
 
   useEffect(() => {
     // Get video element and landmarks from MediaPipe
@@ -159,6 +171,127 @@ const InterviewChatPage = () => {
     faceLandmarks,
     handLandmarks,
   });
+
+  /* ============================================================
+     IDENTITY MISMATCH HANDLING
+     ============================================================ */
+  const { mismatchCount, multipleFacesDetected, noFaceDetected, isCameraOff, isWrongFaceDetected } = useFaceVerification({
+    enabled: mediaPipeEnabled && !!videoElement && !isInterviewTerminated,
+    videoElement,
+    checkIntervalMs: 2000,
+    // CHANGED: Pause identity check if user is distracted (looking away)
+    // This allows coaching mode: warning for distraction but no termination for identity mismatch
+    pauseIdentityCheck: cheatingResult.status === "Distracted"
+  });
+
+  const captureViolationFrame = useCallback(() => {
+    if (!videoElement) return undefined;
+    try {
+      const canvas = document.createElement('canvas');
+      canvas.width = videoElement.videoWidth;
+      canvas.height = videoElement.videoHeight;
+      const ctx = canvas.getContext('2d');
+      if (ctx) {
+        ctx.drawImage(videoElement, 0, 0);
+        return canvas.toDataURL('image/jpeg', 0.8);
+      }
+    } catch (err) {
+      console.error('Error capturing violation frame:', err);
+    }
+    return undefined;
+  }, [videoElement]);
+
+  const terminateInterview = useCallback(async (type: string) => {
+    if (isInterviewTerminated) return;
+
+    setIsInterviewTerminated(true);
+    setViolationType(type);
+
+    let message = "";
+    if (type === "IDENTITY_MISMATCH") message = "Security Protocol Violation: Unauthorized person detected. Session terminated.";
+    else if (type === "CAMERA_OFF") message = "Security Protocol Violation: Camera connection lost or disabled. Session terminated.";
+    else if (type === "MULTIPLE_FACES") message = "Security Protocol Violation: Multiple persons detected. Session terminated.";
+
+    setError(message);
+
+    // Capture screenshot for identity mismatch or other critical violations
+    const screenshot = type === "IDENTITY_MISMATCH" ? captureViolationFrame() : undefined;
+
+    // PREVENT REFRESHe RESUMPTION: Mark session as completed immediately
+    localStorage.setItem("interviewCompleted", "true");
+    if (sessionId) {
+      // Clear chat data prevent restoration
+      localStorage.removeItem(`interviewChat_${sessionId}`);
+      localStorage.removeItem(`interviewQuestionIndex_${sessionId}`);
+      localStorage.removeItem(`interviewTotalQuestions_${sessionId}`);
+
+      await reportViolation(sessionId, type, "Session Terminated", screenshot);
+    }
+
+    // Redirect to dashboard after a delay
+    setTimeout(() => navigate("/dashboard", { replace: true }), 5000);
+  }, [isInterviewTerminated, sessionId, captureViolationFrame, navigate]);
+
+  // Rule 2: Different Person Detected (Immediate)
+  useEffect(() => {
+    if (isWrongFaceDetected && !isInterviewTerminated) {
+      terminateInterview("IDENTITY_MISMATCH");
+    }
+  }, [isWrongFaceDetected, isInterviewTerminated, terminateInterview]);
+
+  // Rule 1: Camera OFF (Technical Failure) - Terminate
+  useEffect(() => {
+    if (isInterviewTerminated) return;
+
+    let timer: any;
+    // Only warn/terminate if camera is technically OFF/Broken OR if NO FACE is detected (user left/covered cam)
+    const shouldWarn = isCameraOff || noFaceDetected;
+
+    if (shouldWarn) {
+      if (rule1Stage === null) {
+        setRule1Stage(1);
+        setRule1Countdown(10);
+      } else if (rule1Stage === 1) {
+        if (rule1Countdown! > 0) {
+          timer = setTimeout(() => setRule1Countdown(prev => prev! - 1), 1000);
+        } else {
+          setRule1Stage(2);
+          setRule1Countdown(10); // Final warning countdown
+        }
+      } else if (rule1Stage === 2) {
+        if (rule1Countdown! > 0) {
+          timer = setTimeout(() => setRule1Countdown(prev => prev! - 1), 1000);
+        } else {
+          terminateInterview("CAMERA_OFF");
+        }
+      }
+    } else {
+      setRule1Stage(null);
+      setRule1Countdown(null);
+    }
+
+    return () => clearTimeout(timer);
+  }, [isCameraOff, noFaceDetected, rule1Countdown, rule1Stage, isInterviewTerminated, terminateInterview]);
+
+  // Rule 3: Multiple Faces
+  useEffect(() => {
+    if (isInterviewTerminated) return;
+
+    let timer: any;
+    if (multipleFacesDetected) {
+      if (rule3Countdown === null) {
+        setRule3Countdown(5);
+      } else if (rule3Countdown > 0) {
+        timer = setTimeout(() => setRule3Countdown(prev => prev! - 1), 1000);
+      } else {
+        terminateInterview("MULTIPLE_FACES");
+      }
+    } else {
+      setRule3Countdown(null);
+    }
+
+    return () => clearTimeout(timer);
+  }, [multipleFacesDetected, rule3Countdown, isInterviewTerminated, terminateInterview]);
 
   // Log cheating detection results
   useEffect(() => {
@@ -324,6 +457,13 @@ const InterviewChatPage = () => {
       );
 
       if (!response.ok) {
+        if (response.status === 401) {
+          // Token invalid/expired
+          localStorage.removeItem("token");
+          localStorage.removeItem("user");
+          navigate("/login");
+          return;
+        }
         if (response.status === 404) {
           throw new Error("Session not found or access denied");
         }
@@ -363,6 +503,7 @@ const InterviewChatPage = () => {
         ];
         setChat(initialChat);
         localStorage.setItem(`interviewChat_${data.sessionId || sessionIdToLoad}`, JSON.stringify(initialChat));
+        setIsSampling(true);
       }
     } catch (err: any) {
       console.error("Error loading interview session:", err);
@@ -481,6 +622,7 @@ const InterviewChatPage = () => {
           setTotalQuestions(data.totalQuestions || null);
           setCurrentQuestionIndex(firstQuestionIndex);
           // TTS will be handled by useEffect watching chat array
+          setIsSampling(true);
         }
       } catch (err: any) {
         setError(err.message);
@@ -517,6 +659,9 @@ const InterviewChatPage = () => {
     // ADD USER MESSAGE (without score/feedback initially)
     setChat((prev) => [...prev, { sender: "user", text: answer }]);
 
+    // Stop sampling when user answers
+    setIsSampling(false);
+
     try {
       setLoading(true);
 
@@ -549,6 +694,7 @@ const InterviewChatPage = () => {
         }
         // Disable MediaPipe auto-restart and ensure the webcam / mediapipe analysis is stopped
         setMediaPipeEnabled(false);
+        setIsSampling(false);
         setCheatingDetectionEnabled(false); // Also disable cheating detection
         try {
           console.log("Attempting to stop MediaPipe analysis...");
@@ -611,6 +757,9 @@ const InterviewChatPage = () => {
         const questionIndex = typeof data.current === "number" ? data.current : (currentQuestionIndex + 1);
         setChat((prev) => [...prev, { sender: "ai", text: aiText, questionIndex }]);
         // TTS will be handled by useEffect watching chat array
+
+        // Start sampling for next question
+        setIsSampling(true);
       }
 
       // UPDATE COUNTERS
@@ -637,183 +786,314 @@ const InterviewChatPage = () => {
      UI
      ============================================================ */
   return (
-    <AppLayout fixLayout={true}>
-      <div className="flex flex-col lg:flex-row w-full h-full gap-4">
-        <div className="flex flex-col flex-1 w-full h-full">
-          <ContentHeader
-            title="Interview Chat"
-            description="Answer the questions one by one"
-            backButton
-            sticky={false}
-          />
+    <>
+      <AppLayout fixLayout={true}>
+        <div className={`flex flex-col lg:flex-row w-full h-full gap-4 ${rule1Stage === 2 ? 'blur-md pointer-events-none transition-all duration-500' : ''}`}>
+          <div className="flex flex-col flex-1 w-full h-full">
+            <ContentHeader
+              title="Interview Chat"
+              description="Answer the questions one by one"
+              backButton
+              sticky={false}
+            />
 
-          <div
-            ref={chatContainerRef}
-            className="flex-1 overflow-y-auto flex flex-col gap-4 p-4"
-          >
-            {sessionLoading && (
-              <div className="flex items-center justify-center py-8">
-                <p className="text-gray-400">Loading interview session...</p>
-              </div>
-            )}
-
-            {!sessionLoading && loading && (
-              <p className="text-gray-400">Processing...</p>
-            )}
-
-            {!sessionLoading && chat.map((msg, idx) => (
-              <motion.div
-                key={idx}
-                initial={{ opacity: 0, y: 10 }}
-                animate={{ opacity: 1, y: 0 }}
-                className={`flex ${msg.sender === "ai" ? "justify-start" : "justify-end"}`}
-              >
-                <div
-                  className={`text-white max-w-[80%] lg:max-w-[60%] rounded-2xl lg:rounded-[1.5vw] flex gap-2 lg:gap-[0.5vw] ${msg.sender === "user"
-                    ? " flex-row-reverse"
-                    : ""
-                    }`}
-                >
-                  <img
-                    src={
-                      msg.sender === "ai"
-                        ? ImagesPath.aiIcon
-                        : ImagesPath.userIcon
-                    }
-                    alt={msg.sender === "ai" ? "ai assistant" : "user"}
-                    className={`object-contain w-4 h-4 lg:w-[2.5vw] lg:h-[2.5vw]`}
-                  />
-                  <div
-                    className={`font-size-20px font-poppins-regular rounded-2xl lg:rounded-[1.5vw] px-4 py-3 ${msg.sender === "ai"
-                      ? "bg-primary text-white"
-                      : "bg-card border border-border text-text-primary"
-                      }`}
-                  >
-                    {msg.text}
-
-                    {msg.sender === "ai" && msg.questionIndex && totalQuestions && (
-                      <div className="text-xs text-gray-300 mt-1">
-                        Question {msg.questionIndex} of {totalQuestions}
-                      </div>
-                    )}
-                  </div>
-                </div>
-              </motion.div>
-            ))}
-
-            {!sessionLoading && chat.length === 0 && !loading && (
-              <div className="flex items-center justify-center py-8">
-                <p className="text-gray-400">No messages yet. Waiting for question...</p>
-              </div>
-            )}
-          </div>
-
-          <div className="pt-4 border-t border-gray-800 px-4 pb-4">
-            {error && <p className="text-sm text-red-400 mb-2">{error}</p>}
-            <div className="relative flex items-center w-full">
-              <textarea
-                value={input}
-                ref={textareaRef}
-                onChange={(e) => {
-                  setInput(e.target.value);
-                  if (textareaRef.current) {
-                    textareaRef.current.style.height = "auto";
-                    textareaRef.current.style.height = `${Math.min(
-                      textareaRef.current.scrollHeight,
-                      150
-                    )}px`;
-                  }
-                }}
-                onKeyDown={handleKeyDown}
-                placeholder="Type your answer..."
-                className="w-full px-4 py-3 pr-12 rounded-lg bg-card border border-border focus:outline-none focus:ring-2 focus:ring-primary/35 focus:border-transparent text-text-primary placeholder:text-text-secondary/70 resize-none scrollbar-hide"
-                rows={1}
-                disabled={sessionLoading || !sessionId}
-              />
-
-              <Button
-                onClick={handleSendMessage}
-                className="absolute right-2 p-2 rounded-md bg-transparent hover:bg-primary/10 text-primary"
-                size="icon"
-                disabled={sessionLoading || !sessionId || loading}
-              >
-                <Send size={20} />
-              </Button>
-            </div>
-          </div>
-        </div>
-
-        {/* MediaPipe Body Language Analysis - UI enabled to show scores */}
-        {!sessionLoading && sessionId && (
-          <div className="lg:w-80 lg:border-l lg:border-gray-800 lg:pl-4 lg:pr-4 lg:pt-4 lg:pb-4 w-full pt-4 space-y-4">
-            <MediaPipeScoresDisplay enabled={mediaPipeEnabled} showUI={true} sessionId={sessionId} />
-
-            {/* MediaPipe-Based Cheating Detection */}
-            <div className="bg-card border border-border rounded-lg p-3 space-y-2 text-xs">
-              <div className="flex items-center justify-between mb-2">
-                <h3 className="text-sm font-semibold text-text-primary">Cheating Detection</h3>
-                <div className="flex items-center gap-2">
-                  <div className={`w-2 h-2 rounded-full ${cheatingDetectionEnabled ? 'bg-green-500 animate-pulse' : 'bg-gray-500'}`}></div>
-                  <span className={`text-xs ${cheatingDetectionEnabled ? 'text-green-400' : 'text-gray-400'}`}>
-                    {cheatingDetectionEnabled ? 'Active' : 'Disabled'}
-                  </span>
-                </div>
-              </div>
-
-              {cheatingResult.error && (
-                <div className="bg-red-900/20 border border-red-700/50 rounded px-3 py-2 text-xs text-red-300">
-                  <div className="font-semibold">⚠️ Detection Error</div>
-                  <div className="text-xs mt-1">{cheatingResult.error}</div>
+            <div
+              ref={chatContainerRef}
+              className="flex-1 overflow-y-auto flex flex-col gap-4 p-4"
+            >
+              {sessionLoading && (
+                <div className="flex items-center justify-center py-8">
+                  <p className="text-gray-400">Loading interview session...</p>
                 </div>
               )}
 
-              {!cheatingResult.error && (
-                <>
-                  {cheatingResult.cheatingDetected ? (
-                    <div className="bg-red-900/20 border border-red-700/50 rounded px-3 py-2 space-y-1">
-                      <div className="font-semibold text-red-400">⚠️ Cheating Detected</div>
-                      <div className="text-xs text-red-300">
-                        Status: <span className="font-semibold">{cheatingResult.status}</span>
-                      </div>
-                      {cheatingResult.phoneDetected && (
-                        <div className="text-xs text-red-300">📱 Phone detected by backend</div>
-                      )}
-                      {cheatingResult.behavioralCheatingDetected && (
-                        <div className="text-xs text-red-300">
-                          Behavior Score: {cheatingResult.behaviorScore}/100
+              {!sessionLoading && loading && (
+                <p className="text-gray-400">Processing...</p>
+              )}
+
+              {!sessionLoading && chat.map((msg, idx) => (
+                <motion.div
+                  key={idx}
+                  initial={{ opacity: 0, y: 10 }}
+                  animate={{ opacity: 1, y: 0 }}
+                  className={`flex ${msg.sender === "ai" ? "justify-start" : "justify-end"}`}
+                >
+                  <div
+                    className={`text-white max-w-[80%] lg:max-w-[60%] rounded-2xl lg:rounded-[1.5vw] flex gap-2 lg:gap-[0.5vw] ${msg.sender === "user"
+                      ? " flex-row-reverse"
+                      : ""
+                      }`}
+                  >
+                    <img
+                      src={
+                        msg.sender === "ai"
+                          ? ImagesPath.aiIcon
+                          : ImagesPath.userIcon
+                      }
+                      alt={msg.sender === "ai" ? "ai assistant" : "user"}
+                      className={`object-contain w-4 h-4 lg:w-[2.5vw] lg:h-[2.5vw]`}
+                    />
+                    <div
+                      className={`font-size-20px font-poppins-regular rounded-2xl lg:rounded-[1.5vw] px-4 py-3 ${msg.sender === "ai"
+                        ? "bg-primary text-white"
+                        : "bg-card border border-border text-text-primary"
+                        }`}
+                    >
+                      {msg.text}
+
+                      {msg.sender === "ai" && msg.questionIndex && totalQuestions && (
+                        <div className="text-xs text-gray-300 mt-1">
+                          Question {msg.questionIndex} of {totalQuestions}
                         </div>
                       )}
                     </div>
-                  ) : (
-                    <div className="bg-green-900/20 border border-green-700/30 rounded px-3 py-2 space-y-1">
-                      <div className="text-green-400 text-xs font-semibold">✅ No Cheating Detected</div>
-                      <div className="text-xs text-green-300">
-                        Status: <span className="font-semibold">{cheatingResult.status}</span>
-                      </div>
-                      {cheatingResult.behaviorScore > 0 && (
-                        <div className="text-xs text-green-300">
-                          Behavior Score: {cheatingResult.behaviorScore}/100
-                        </div>
-                      )}
+                  </div>
+                </motion.div>
+              ))}
+
+              {!sessionLoading && chat.length === 0 && !loading && (
+                <div className="flex items-center justify-center py-8">
+                  <p className="text-gray-400">No messages yet. Waiting for question...</p>
+                </div>
+              )}
+            </div>
+
+            <div className="pt-4 border-t border-gray-800 px-4 pb-4">
+              {error && <p className="text-sm text-red-400 mb-2">{error}</p>}
+
+              {/* Identity Verification Warnings */}
+              {mismatchCount >= 2 && mismatchCount < 6 && (
+                <div className="mb-2 p-3 bg-red-900/40 border border-red-500 rounded-lg text-red-100 text-xs font-semibold animate-pulse shadow-lg">
+                  <div className="flex items-center gap-2 mb-1">
+                    <svg className="w-4 h-4 text-red-400" fill="currentColor" viewBox="0 0 20 20">
+                      <path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zM8.707 7.293a1 1 0 00-1.414 1.414L8.586 10l-1.293 1.293a1 1 0 101.414 1.414L10 11.414l1.293 1.293a1 1 0 101.414-1.414L11.414 10l1.293-1.293a1 1 0 00-1.414-1.414L10 8.586 8.707 7.293z" clipRule="evenodd" />
+                    </svg>
+                    <span className="uppercase tracking-wider">Security Protocol Alert</span>
+                  </div>
+                  {noFaceDetected ? "Candidate face not detected. Please remain in frame." :
+                    multipleFacesDetected ? "Multiple individuals detected. This is a critical security violation." :
+                      "Registered candidate not detected. Unauthorized individual present."}
+                  <span className="block mt-1 text-red-300 opacity-80 italic">Proctoring Status: {mismatchCount}/6 violation flags recorded.</span>
+                </div>
+              )}
+
+              <div className="relative flex items-center w-full">
+                <textarea
+                  value={input}
+                  ref={textareaRef}
+                  onChange={(e) => {
+                    setInput(e.target.value);
+                    if (textareaRef.current) {
+                      textareaRef.current.style.height = "auto";
+                      textareaRef.current.style.height = `${Math.min(
+                        textareaRef.current.scrollHeight,
+                        150
+                      )}px`;
+                    }
+                  }}
+                  onKeyDown={handleKeyDown}
+                  placeholder="Type your answer..."
+                  className="w-full px-4 py-3 pr-12 rounded-lg bg-card border border-border focus:outline-none focus:ring-2 focus:ring-primary/35 focus:border-transparent text-text-primary placeholder:text-text-secondary/70 resize-none scrollbar-hide"
+                  rows={1}
+                  disabled={sessionLoading || !sessionId}
+                />
+
+                <Button
+                  onClick={handleSendMessage}
+                  className="absolute right-2 p-2 rounded-md bg-transparent hover:bg-primary/10 text-primary"
+                  size="icon"
+                  disabled={sessionLoading || !sessionId || loading}
+                >
+                  <Send size={20} />
+                </Button>
+              </div>
+            </div>
+          </div>
+
+          {/* MediaPipe Body Language Analysis - UI enabled to show scores */}
+          {!sessionLoading && sessionId && (
+            <div className="lg:w-80 lg:border-l lg:border-gray-800 lg:pl-4 lg:pr-4 lg:pt-4 lg:pb-4 w-full pt-4 space-y-4">
+              <MediaPipeScoresDisplay
+                enabled={mediaPipeEnabled}
+                showUI={true}
+                sessionId={sessionId || undefined}
+                isSampling={isSampling}
+                questionIndex={currentQuestionIndex}
+              />    {/* MediaPipe-Based Cheating Detection */}
+              <div className="bg-card border border-border rounded-lg p-3 space-y-2 text-xs">
+                <div className="flex items-center justify-between mb-2">
+                  <h3 className="text-sm font-semibold text-text-primary">Cheating Detection</h3>
+                  <div className={`px-2 py-0.5 rounded text-xs font-medium ${cheatingResult.cheatingDetected || multipleFacesDetected
+                    ? 'bg-red-500/20 text-red-500'
+                    : (noFaceDetected || cheatingResult.status === 'Distracted')
+                      ? 'bg-yellow-500/20 text-yellow-500'
+                      : 'bg-green-500/20 text-green-500'
+                    }`}>
+                    {cheatingResult.cheatingDetected || multipleFacesDetected
+                      ? 'Violation'
+                      : (noFaceDetected || cheatingResult.status === 'Distracted')
+                        ? 'Distracted'
+                        : 'Active'}
+                  </div>
+                </div>
+
+                <div className="space-y-2">
+                  {/* Phone Detection Status */}
+                  <div className="flex items-center justify-between text-gray-400">
+                    <span>Phone Detection</span>
+                    <span className={cheatingResult.phoneDetected ? "text-red-500 font-bold" : "text-green-500"}>
+                      {cheatingResult.phoneDetected ? "DETECTED" : "Clear"}
+                    </span>
+                  </div>
+
+                  {/* Behavioral Analysis */}
+                  <div className="flex items-center justify-between text-gray-400">
+                    <span>Focus Analysis</span>
+                    <span className={
+                      cheatingResult.behavioralCheatingDetected
+                        ? "text-red-500 font-bold"
+                        : (noFaceDetected || cheatingResult.status === 'Distracted')
+                          ? "text-yellow-500 font-bold"
+                          : "text-green-500"
+                    }>
+                      {cheatingResult.behavioralCheatingDetected
+                        ? "SUSPICIOUS"
+                        : (noFaceDetected || cheatingResult.status === 'Distracted')
+                          ? "DISTRACTED"
+                          : "FOCUSED"}
+                    </span>
+                  </div>
+
+                  {/* Warning Message if Distracted/No Face */}
+                  {(noFaceDetected || cheatingResult.status === 'Distracted') && !cheatingResult.cheatingDetected && (
+                    <div className="bg-yellow-500/10 border border-yellow-500/20 rounded p-2 text-xs text-yellow-500 mt-2">
+                      ⚠️ Distracted? Please keep your face visible and look at the camera.
                     </div>
                   )}
 
                   {/* Detailed behavioral scores */}
                   {cheatingResult.scores.behaviorScore > 0 && (
-                    <div className="text-xs text-text-secondary mt-2 space-y-1">
+                    <div className="text-xs text-text-secondary mt-2 space-y-1 border-t border-border pt-2">
                       <div>Gaze Down: {cheatingResult.scores.gazeDown.toFixed(1)}s</div>
                       {cheatingResult.scores.headPitchDown && <div>Head Pitch: Down</div>}
                       {cheatingResult.scores.handNearFace && <div>Hand Near Face: Yes</div>}
                       {cheatingResult.scores.faceOutOfFrame && <div>Face Out of Frame: Yes</div>}
                     </div>
                   )}
-                </>
-              )}
+                </div>
+              </div>
             </div>
+          )}
+        </div>
+      </AppLayout>
+
+      {/* Rule 1 Warning (Yellow) */}
+      {rule1Stage === 1 && rule1Countdown !== null && !isInterviewTerminated && (
+        <div className="fixed top-20 left-1/2 -translate-x-1/2 z-[100] w-[90%] max-w-lg">
+          <motion.div
+            initial={{ y: -100, opacity: 0 }}
+            animate={{ y: 0, opacity: 1 }}
+            className="bg-yellow-500 border-2 border-yellow-600 rounded-xl p-4 shadow-2xl flex items-center gap-4"
+          >
+            <div className="bg-yellow-600/20 p-2 rounded-full">
+              <Camera className="text-yellow-900 size-6" />
+            </div>
+            <div className="flex-1">
+              <h3 className="text-yellow-900 font-bold text-lg">Camera is Off</h3>
+              <p className="text-yellow-800 text-sm">Please turn it on within 10 seconds to continue.</p>
+            </div>
+            <div className="relative size-12 flex items-center justify-center">
+              <svg className="absolute inset-0 size-full -rotate-90" viewBox="0 0 100 100">
+                <circle cx="50" cy="50" r="45" fill="none" stroke="rgba(120, 53, 15, 0.2)" strokeWidth="8" />
+                <circle cx="50" cy="50" r="45" fill="none" stroke="rgba(120, 53, 15, 0.8)" strokeWidth="8" strokeDasharray="283" strokeDashoffset={283 - (283 * (rule1Countdown / 10))} className="transition-all duration-1000 ease-linear" />
+              </svg>
+              <span className="text-yellow-900 font-black text-xl">{rule1Countdown}</span>
+            </div>
+          </motion.div>
+        </div>
+      )}
+
+      {/* Rule 1 Stage 2 / Final Warning (Red) */}
+      {rule1Stage === 2 && rule1Countdown !== null && !isInterviewTerminated && (
+        <div className="fixed inset-0 z-[999] bg-black/60 backdrop-blur-sm flex items-center justify-center p-6">
+          <motion.div
+            initial={{ scale: 0.9, opacity: 0 }}
+            animate={{ scale: 1, opacity: 1 }}
+            className="bg-slate-900 border-2 border-red-500 rounded-2xl p-8 max-w-md w-full text-center shadow-[0_0_50px_rgba(239,68,68,0.3)]"
+          >
+            <div className="bg-red-500/20 size-20 rounded-full flex items-center justify-center mx-auto mb-6 border border-red-500/30">
+              <AlertCircle className="text-red-500 size-12 animate-pulse" />
+            </div>
+            <h2 className="text-red-500 text-3xl font-black mb-4 uppercase italic tracking-wider">Final Warning</h2>
+            <p className="text-slate-300 text-lg mb-8">Interview will be terminated immediately. Enable camera now!</p>
+            <div className="text-6xl font-black text-white mb-2">{rule1Countdown}</div>
+            <div className="text-red-500/60 text-xs font-bold uppercase tracking-[0.2em]">Seconds Remaining</div>
+          </motion.div>
+        </div>
+      )}
+
+      {/* Rule 2: Identity Mismatch (Red - Immediate) */}
+      {isInterviewTerminated && violationType === "IDENTITY_MISMATCH" && (
+        <div className="fixed inset-0 z-[1000] bg-slate-950 flex items-center justify-center p-6">
+          <motion.div
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            className="text-center max-w-lg"
+          >
+            <div className="size-24 bg-red-600 rounded-full flex items-center justify-center mx-auto mb-8 shadow-[0_0_40px_rgba(220,38,38,0.5)]">
+              <UserX className="text-white size-14" />
+            </div>
+            <h1 className="text-red-500 text-4xl font-black mb-4 uppercase tracking-tighter">Security Violation</h1>
+            <p className="text-white text-xl font-medium mb-2">Unauthorized Person Detected</p>
+            <p className="text-slate-400 mb-8">The assessment has been terminated to ensure integrity. A report has been sent to the proctoring team.</p>
+            <div className="bg-slate-900 border border-slate-800 rounded-lg p-4 inline-flex items-center gap-3 text-slate-400">
+              <Clock className="size-5" />
+              <span>Redirecting to dashboard...</span>
+            </div>
+          </motion.div>
+        </div>
+      )}
+
+      {/* Rule 3: Multiple Faces Warning (Yellow) */}
+      {rule3Countdown !== null && !isInterviewTerminated && (
+        <div className="fixed top-20 left-1/2 -translate-x-1/2 z-[100] w-[90%] max-w-lg">
+          <motion.div
+            initial={{ y: -100, opacity: 0 }}
+            animate={{ y: 0, opacity: 1 }}
+            className="bg-yellow-500 border-2 border-yellow-600 rounded-xl p-4 shadow-2xl flex items-center gap-4"
+          >
+            <div className="bg-yellow-600/20 p-2 rounded-full">
+              <Users className="text-yellow-900 size-6" />
+            </div>
+            <div className="flex-1">
+              <h3 className="text-yellow-900 font-bold text-lg">Multiple Persons Detected</h3>
+              <p className="text-yellow-800 text-sm">Only one participant is allowed. Please remove others.</p>
+            </div>
+            <div className="relative size-12 flex items-center justify-center">
+              <svg className="absolute inset-0 size-full -rotate-90" viewBox="0 0 100 100">
+                <circle cx="50" cy="50" r="45" fill="none" stroke="rgba(120, 53, 15, 0.2)" strokeWidth="8" />
+                <circle cx="50" cy="50" r="45" fill="none" stroke="rgba(120, 53, 15, 0.8)" strokeWidth="8" strokeDasharray="283" strokeDashoffset={283 - (283 * (rule3Countdown / 5))} className="transition-all duration-1000 ease-linear" />
+              </svg>
+              <span className="text-yellow-900 font-black text-xl">{rule3Countdown}</span>
+            </div>
+          </motion.div>
+        </div>
+      )}
+
+      {/* General Termination Overlay */}
+      {isInterviewTerminated && violationType !== "IDENTITY_MISMATCH" && (
+        <div className="fixed inset-0 z-[1000] bg-slate-950 flex items-center justify-center p-6">
+          <div className="text-center max-w-lg">
+            <div className="size-20 bg-red-500/20 rounded-full flex items-center justify-center mx-auto mb-6 border border-red-500/30">
+              <AlertCircle className="text-red-500 size-12" />
+            </div>
+            <h1 className="text-white text-3xl font-black mb-4 uppercase">Session Terminated</h1>
+            <p className="text-slate-400 text-lg mb-8">{error}</p>
+            <div className="text-primary text-sm font-bold animate-pulse">Redirecting to dashboard...</div>
           </div>
-        )}
-      </div>
-    </AppLayout>
+        </div>
+      )}
+    </>
   );
 };
 

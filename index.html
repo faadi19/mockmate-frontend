@@ -1,60 +1,65 @@
 <!doctype html>
 <html lang="en">
-  <head>
-    <meta charset="UTF-8" />
-    <link rel="icon" type="image/png" href="/src/assets/mmLogo1-transparent.png" />
-    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>MockMate Interview Preparation Platform</title>
-    <!-- MediaPipe CDN - Using stable versions to avoid SIMD WASM crashes -->
-    <!-- CRITICAL: Scripts must load BEFORE React app initializes -->
-    <!-- CRITICAL: Module configuration must happen BEFORE MediaPipe scripts load -->
-    <script>
-      // Configure Module.arguments_ BEFORE MediaPipe loads to prevent WASM crashes
-      // This fixes "Module.arguments has been replaced" runtime error
-      (function() {
-        if (typeof window.Module === 'undefined') {
-          window.Module = {};
+
+<head>
+  <meta charset="UTF-8" />
+  <link rel="icon" type="image/png" href="/src/assets/mmLogo1-transparent.png" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>MockMate Interview Preparation Platform</title>
+  <!-- MediaPipe CDN - Using stable versions to avoid SIMD WASM crashes -->
+  <!-- CRITICAL: Scripts must load BEFORE React app initializes -->
+  <!-- CRITICAL: Module configuration must happen BEFORE MediaPipe scripts load -->
+  <script>
+    // Configure Module.arguments_ BEFORE MediaPipe loads to prevent WASM crashes
+    // This fixes "Module.arguments has been replaced" runtime error
+    (function () {
+      if (typeof window.Module === 'undefined') {
+        window.Module = {};
+      }
+      // Set arguments_ before MediaPipe WASM modules try to access it
+      window.Module.arguments_ = window.Module.arguments_ || [];
+    })();
+  </script>
+  <!-- Load MediaPipe scripts SYNCHRONOUSLY to ensure they're available before React -->
+  <!-- Using unpkg CDN without version numbers (loads latest stable) -->
+  <!-- This avoids 404 errors from incorrect version paths -->
+  <!-- Order matters: camera_utils and drawing_utils first, then face_mesh and hands -->
+  <script src="https://unpkg.com/@mediapipe/camera_utils/camera_utils.js" crossorigin="anonymous"></script>
+  <script src="https://unpkg.com/@mediapipe/drawing_utils/drawing_utils.js" crossorigin="anonymous"></script>
+  <script src="https://unpkg.com/@mediapipe/face_mesh/face_mesh.js" crossorigin="anonymous"></script>
+  <script src="https://unpkg.com/@mediapipe/hands/hands.js" crossorigin="anonymous"></script>
+  <!-- Face-api.js CDN -->
+  <script src="https://cdn.jsdelivr.net/npm/face-api.js@0.22.2/dist/face-api.min.js"></script>
+  <!-- Verification script: Log MediaPipe availability and handle CORS errors -->
+  <script>
+    // Track script loading errors
+    window.mediaPipeLoadErrors = [];
+
+    // Verify MediaPipe scripts loaded successfully
+    window.addEventListener('load', function () {
+      setTimeout(function () {
+        if (window.FaceMesh && window.Hands && window.Camera) {
+          console.log('✅ MediaPipe scripts loaded successfully');
+          window.mediaPipeReady = true;
+        } else {
+          const status = {
+            FaceMesh: !!window.FaceMesh,
+            Hands: !!window.Hands,
+            Camera: !!window.Camera
+          };
+          console.error('❌ MediaPipe scripts failed to load:', status);
+          console.error('💡 If you see CORS errors, try: 1) Different browser, 2) Disable CORS extensions, 3) Use npm packages instead');
+          window.mediaPipeReady = false;
+          window.mediaPipeLoadErrors = status;
         }
-        // Set arguments_ before MediaPipe WASM modules try to access it
-        window.Module.arguments_ = window.Module.arguments_ || [];
-      })();
-    </script>
-    <!-- Load MediaPipe scripts SYNCHRONOUSLY to ensure they're available before React -->
-    <!-- Using unpkg CDN without version numbers (loads latest stable) -->
-    <!-- This avoids 404 errors from incorrect version paths -->
-    <!-- Order matters: camera_utils and drawing_utils first, then face_mesh and hands -->
-    <script src="https://unpkg.com/@mediapipe/camera_utils/camera_utils.js" crossorigin="anonymous"></script>
-    <script src="https://unpkg.com/@mediapipe/drawing_utils/drawing_utils.js" crossorigin="anonymous"></script>
-    <script src="https://unpkg.com/@mediapipe/face_mesh/face_mesh.js" crossorigin="anonymous"></script>
-    <script src="https://unpkg.com/@mediapipe/hands/hands.js" crossorigin="anonymous"></script>
-    <!-- Verification script: Log MediaPipe availability and handle CORS errors -->
-    <script>
-      // Track script loading errors
-      window.mediaPipeLoadErrors = [];
-      
-      // Verify MediaPipe scripts loaded successfully
-      window.addEventListener('load', function() {
-        setTimeout(function() {
-          if (window.FaceMesh && window.Hands && window.Camera) {
-            console.log('✅ MediaPipe scripts loaded successfully');
-            window.mediaPipeReady = true;
-          } else {
-            const status = {
-              FaceMesh: !!window.FaceMesh,
-              Hands: !!window.Hands,
-              Camera: !!window.Camera
-            };
-            console.error('❌ MediaPipe scripts failed to load:', status);
-            console.error('💡 If you see CORS errors, try: 1) Different browser, 2) Disable CORS extensions, 3) Use npm packages instead');
-            window.mediaPipeReady = false;
-            window.mediaPipeLoadErrors = status;
-          }
-        }, 2000); // Wait 2 seconds for scripts to load
-      });
-    </script>
-  </head>
-  <body>
-    <div id="root"></div>
-    <script type="module" src="/src/main.tsx"></script>
-  </body>
+      }, 2000); // Wait 2 seconds for scripts to load
+    });
+  </script>
+</head>
+
+<body>
+  <div id="root"></div>
+  <script type="module" src="/src/main.tsx"></script>
+</body>
+
 </html>

@@ -15,7 +15,13 @@ const PrivateRoute = ({ children }: PrivateRouteProps) => {
   if (loading) return null;
 
   // Normal auth
-  if (isAuthenticated) return <>{children}</>;
+  if (isAuthenticated) {
+    const { user } = useAuth();
+    if (user?.role === 'admin') {
+      return <Navigate to="/admin/dashboard" replace />;
+    }
+    return <>{children}</>;
+  }
 
   // Demo mode: allow ONLY dashboard to be viewed without auth
   if (isDemoMode() && location.pathname === "/dashboard") {

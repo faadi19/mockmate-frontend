@@ -14,12 +14,16 @@ import { setDemoMode } from "../utils/demoMode";
 
 const HomePage = () => {
   const navigate = useNavigate();
-  const { isAuthenticated } = useAuth();
+  const { isAuthenticated, user } = useAuth();
   const reduceMotion = useReducedMotion();
 
   const handleGetStarted = () => {
     if (isAuthenticated) {
-      navigate("/dashboard");
+      if (user?.role === 'admin') {
+        navigate("/admin/dashboard");
+      } else {
+        navigate("/dashboard");
+      }
     } else {
       navigate("/signup");
     }

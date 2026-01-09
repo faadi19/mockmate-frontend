@@ -9,6 +9,7 @@ type User = {
   email: string;
   dob: string;
   citizenship: string;
+  role?: string;
 };
 
 type AuthContextType = {
@@ -16,7 +17,7 @@ type AuthContextType = {
   token: string | null;
   isAuthenticated: boolean;
   loading: boolean;
-  login: (email: string, password: string) => Promise<void>;
+  login: (email: string, password: string) => Promise<User | null>;
   signup: (
     name: string,
     email: string,
@@ -71,15 +72,44 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
 
     if (savedToken) {
       setToken(savedToken);
-      // Only update activity if it doesn't exist (first time login)
-      // Don't update on refresh to avoid resetting timeout
-      const lastActivity = localStorage.getItem("lastActivity");
-      if (!lastActivity) {
+      if (!localStorage.getItem("lastActivity")) {
         updateLastActivity();
       }
     }
-    if (savedUser) setUser(JSON.parse(savedUser));
+    if (savedUser) {
+      try {
+        setUser(JSON.parse(savedUser));
+      } catch (e) {
+        console.error("Failed to parse saved user:", e);
+        localStorage.removeItem("user");
+      }
+    }
     setLoading(false);
+
+    // Axios Interceptor for 401s
+    const interceptor = axios.interceptors.response.use(
+      (response) => response,
+      (error) => {
+        if (error.response?.status === 401) {
+          // Only logout if not already on login page to avoid loops
+          if (!window.location.pathname.includes('/login')) {
+            console.warn("Session expired or invalid token. Logging out.");
+            localStorage.removeItem("token");
+            localStorage.removeItem("user");
+            localStorage.removeItem("lastActivity");
+            setUser(null);
+            setToken(null);
+            // Use window.location for hard redirect to clear state
+            window.location.href = "/login";
+          }
+        }
+        return Promise.reject(error);
+      }
+    );
+
+    return () => {
+      axios.interceptors.response.eject(interceptor);
+    };
   }, []);
 
   // Track user activity and check session timeout
@@ -88,29 +118,23 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
 
     // Check session on mount (but don't logout on refresh)
     const checkSessionOnMount = () => {
-      const lastActivity = localStorage.getItem("lastActivity");
-      if (!lastActivity) {
-        // First time, set activity
+      if (!localStorage.getItem("lastActivity")) {
         updateLastActivity();
-        return;
-      }
-      // If session expired, logout
-      if (isSessionExpired()) {
-        autoLogout();
       }
     };
 
-    // Check after a small delay to avoid immediate logout on refresh
     const checkTimer = setTimeout(checkSessionOnMount, 1000);
 
     const activityEvents = ['mousedown', 'mousemove', 'keypress', 'scroll', 'touchstart', 'click'];
-    let activityTimer: NodeJS.Timeout;
+    let activityTimer: any; // Use any to avoid NodeJS type error
 
     const handleActivity = () => {
-      clearTimeout(activityTimer);
-      activityTimer = setTimeout(() => {
-        updateLastActivity();
-      }, 2000); // Debounce: update after 2 seconds of inactivity
+      if (!activityTimer) {
+        activityTimer = setTimeout(() => {
+          updateLastActivity();
+          activityTimer = null;
+        }, 5000); // Throttled: update once every 5 seconds
+      }
     };
 
     // Add event listeners
@@ -118,20 +142,15 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
       window.addEventListener(event, handleActivity);
     });
 
-    // Check session periodically (every 10 minutes)
-    const sessionCheckInterval = setInterval(() => {
-      if (isSessionExpired()) {
-        autoLogout();
-      }
-    }, 10 * 60 * 1000); // Check every 10 minutes
+    // Removed aggressive setInterval auto-logout. 
+    // We now rely on the 401 Interceptor to handle expired sessions from the backend.
 
     return () => {
       clearTimeout(checkTimer);
       activityEvents.forEach(event => {
         window.removeEventListener(event, handleActivity);
       });
-      clearTimeout(activityTimer);
-      clearInterval(sessionCheckInterval);
+      if (activityTimer) clearTimeout(activityTimer);
     };
   }, [token]);
 
@@ -152,6 +171,7 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
     localStorage.setItem("token", token);
     localStorage.setItem("user", JSON.stringify(user));
     updateLastActivity(); // Set activity timestamp on login
+    return user;
   };
 
   // 2️⃣ SIGNUP

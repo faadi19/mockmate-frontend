@@ -56,11 +56,19 @@ let globalInitializationGuard = false;
  * 3. Proper Module.arguments_ configuration before WASM loads
  * 4. Correct locateFile paths for CDN assets
  * 5. Stable MediaPipe version to avoid SIMD crashes
+ * 6. Question-based sampling logic implemented.
  * 
  * @param enabled - Whether to enable MediaPipe analysis
  * @param sessionId - Interview session ID for saving data to backend
+ * @param isSampling - Whether to collect samples for the current question
+ * @param questionIndex - Current question index for tagging data
  */
-export function useMediaPipeAnalysis(enabled: boolean = true, sessionId?: string) {
+export function useMediaPipeAnalysis(
+  enabled: boolean = true,
+  sessionId?: string,
+  isSampling: boolean = false,
+  questionIndex: number = 0
+) {
   const [scores, setScores] = useState<BodyLanguageScores>({
     eyeContact: 0,
     engagement: 0,
@@ -80,6 +88,7 @@ export function useMediaPipeAnalysis(enabled: boolean = true, sessionId?: string
     expressionConfidence: 0,
     sampleCount: 0,
     timestamp: Date.now(),
+    faceDetected: false,
   });
 
   const [isInitialized, setIsInitialized] = useState(false);
@@ -96,23 +105,21 @@ export function useMediaPipeAnalysis(enabled: boolean = true, sessionId?: string
   // Track previous positions for stability calculation
   const previousHeadPositionRef = useRef<{ x: number; y: number } | null>(null);
   const previousHandPositionsRef = useRef<Array<{ x: number; y: number }>>([]);
-  
+
   // Store current hand landmarks for expression detection (hand near head = nervous)
   const currentHandLandmarksRef = useRef<any[]>([]);
-  
+
   // Store current face landmarks for cheating detection
   const currentFaceLandmarksRef = useRef<any[] | null>(null);
-  
+
   // Store current hand landmarks array (for cheating detection)
   const currentHandLandmarksArrayRef = useRef<any[][]>([]);
 
-  // Score history for aggregation (rolling window)
-  const scoreHistoryRef = useRef<BodyLanguageScores[]>([]);
-  const MAX_HISTORY_SIZE = 30; // Keep last 30 samples (~1 second at 30fps)
+  // Accumulator for the current question
+  const questionAccumulatorRef = useRef<BodyLanguageScores[]>([]);
 
-  // Periodic save to backend (every 10 seconds)
-  const lastSaveTimeRef = useRef<number>(0);
-  const SAVE_INTERVAL_MS = 10000; // Save every 10 seconds
+  // Throttling for sampling (1-2 seconds)
+  const lastSampleTimeRef = useRef<number>(0);
 
   /**
    * Configure Module.arguments_ BEFORE MediaPipe initialization
@@ -120,29 +127,103 @@ export function useMediaPipeAnalysis(enabled: boolean = true, sessionId?: string
    */
   const configureWasmModule = useCallback(() => {
     if (typeof window === 'undefined') return;
-    
+
     // Initialize Module if it doesn't exist
     if (!window.Module) {
       window.Module = {};
     }
-    
+
     // CRITICAL: Set arguments_ before MediaPipe loads WASM
     // This prevents the "Module.arguments has been replaced" runtime error
     if (!window.Module.arguments_) {
       window.Module.arguments_ = [];
     }
-    
+
     // Prevent MediaPipe from overwriting arguments_
     Object.defineProperty(window.Module, 'arguments', {
-      get: function() {
+      get: function () {
         return this.arguments_ || [];
       },
-      set: function(value) {
+      set: function (value) {
         this.arguments_ = value || [];
       },
       configurable: true,
     });
   }, []);
+
+  /**
+   * Aggregate scores over time (calculate average)
+   * Also calculates dominant expression (most common over time)
+   */
+  const aggregateScores = (history: BodyLanguageScores[]): BodyLanguageScores & { dominantExpression?: FacialExpression | null } => {
+    if (history.length === 0) {
+      return {
+        eyeContact: 0,
+        engagement: 0,
+        attention: 0,
+        stability: 0,
+        expression: null,
+        expressionConfidence: 0,
+        faceDetected: false,
+      };
+    }
+
+    // Filter out scores where face was not detected
+    const validScores = history.filter(score => score.faceDetected && score.expression !== null);
+
+    if (validScores.length === 0) {
+      return {
+        eyeContact: 0,
+        engagement: 0,
+        attention: 0,
+        stability: 0,
+        expression: null,
+        expressionConfidence: 0,
+        faceDetected: false,
+      };
+    }
+
+    const sum = validScores.reduce(
+      (acc, score) => ({
+        eyeContact: acc.eyeContact + score.eyeContact,
+        engagement: acc.engagement + score.engagement,
+        attention: acc.attention + score.attention,
+        stability: acc.stability + score.stability,
+        expressionConfidence: acc.expressionConfidence + score.expressionConfidence,
+      }),
+      { eyeContact: 0, engagement: 0, attention: 0, stability: 0, expressionConfidence: 0 }
+    );
+
+    const count = validScores.length;
+
+    // Calculate dominant expression (most common in history, only from valid scores)
+    const expressionCounts: Record<FacialExpression, number> = {
+      confident: 0,
+      nervous: 0,
+      distracted: 0,
+    };
+
+    validScores.forEach(score => {
+      if (score.expression) {
+        expressionCounts[score.expression]++;
+      }
+    });
+
+    const dominantExpression = Object.entries(expressionCounts).reduce((a, b) =>
+      expressionCounts[a[0] as FacialExpression] > expressionCounts[b[0] as FacialExpression] ? a : b
+    )[0] as FacialExpression;
+
+    return {
+      eyeContact: Math.round(sum.eyeContact / count),
+      engagement: Math.round(sum.engagement / count),
+      attention: Math.round(sum.attention / count),
+      stability: Math.round(sum.stability / count),
+      expression: dominantExpression,
+      expressionConfidence: Math.round(sum.expressionConfidence / count),
+      faceDetected: true,
+      dominantExpression,
+    };
+  };
 
   /**
    * Initialize MediaPipe Face Mesh
@@ -153,7 +234,7 @@ export function useMediaPipeAnalysis(enabled: boolean = true, sessionId?: string
     if (faceMeshRef.current) {
       return faceMeshRef.current;
     }
-    
+
     // CRITICAL: Runtime check before initialization
     // This prevents "scripts failed to load" errors
     if (typeof window === 'undefined' || !window.FaceMesh) {
@@ -184,20 +265,20 @@ export function useMediaPipeAnalysis(enabled: boolean = true, sessionId?: string
       minTrackingConfidence: 0.5,
     });
 
-    faceMesh.onResults((results) => {
+    faceMesh.onResults((results: any) => {
       if (!enabled) return;
 
       try {
         const faceLandmarks = results.multiFaceLandmarks?.[0];
-        
+
         // Store face landmarks for cheating detection
         currentFaceLandmarksRef.current = faceLandmarks && faceLandmarks.length >= 468 ? faceLandmarks : null;
-        
+
         if (faceLandmarks && faceLandmarks.length >= 468) {
           // Calculate scores
           const eyeContact = calculateEyeContactScore(faceLandmarks);
           const engagement = calculateEngagementScore(faceLandmarks);
-          
+
           const headPosition = getHeadPosition(faceLandmarks);
           const attention = calculateAttentionScore(
             faceLandmarks,
@@ -242,61 +323,37 @@ export function useMediaPipeAnalysis(enabled: boolean = true, sessionId?: string
 
           setScores(newScores);
 
-          // Add to history for aggregation
-          scoreHistoryRef.current.push(newScores);
-          if (scoreHistoryRef.current.length > MAX_HISTORY_SIZE) {
-            scoreHistoryRef.current.shift();
-          }
+          // --- SAMPLING LOGIC START ---
+          // Sample collector (throttled)
+          const now = Date.now();
+          // Random throttle between 1000ms and 2000ms
+          const throttleMs = 1500;
 
-          // Calculate aggregated scores (average over history)
-          const aggregated = aggregateScores(scoreHistoryRef.current);
-          const aggregatedWithMetadata = {
-            ...aggregated,
-            sampleCount: scoreHistoryRef.current.length,
-            timestamp: Date.now(),
-          };
-          setAggregatedScores(aggregatedWithMetadata);
+          // Logic: Only collect if sampling is enabled AND enough time passed
+          // We use a ref on the hook level to track 'enabled' and 'isSampling' state 
+          // but since this callback is created once, we rely on the ref values if we were to use them inside closure.
+          // However, 'enabled' is in dependency array so it re-creates.
+          // We need to access 'isSampling' which changes often.
+          // WARNING: 'isSampling' is not in dependency array to avoid re-initializing FaceMesh.
+          // Instead, we should check a ref that tracks isSampling.
 
-          // Save to backend periodically (every 10 seconds) if sessionId is provided
-          if (sessionId && scoreHistoryRef.current.length > 0) {
-            const now = Date.now();
-            if (now - lastSaveTimeRef.current >= SAVE_INTERVAL_MS) {
-              lastSaveTimeRef.current = now;
-              
-              // Save aggregated data to backend
-              saveBodyLanguageData({
-                sessionId,
-                eyeContact: aggregated.eyeContact,
-                engagement: aggregated.engagement,
-                attention: aggregated.attention,
-                stability: aggregated.stability,
-                expression: aggregated.expression,
-                expressionConfidence: aggregated.expressionConfidence,
-                dominantExpression: aggregated.dominantExpression,
-                sampleCount: aggregatedWithMetadata.sampleCount,
-                timestamp: aggregatedWithMetadata.timestamp,
-              }).catch((err) => {
-                // Error already logged in saveBodyLanguageData
-                console.warn("Failed to save body language data:", err);
+          if (isSamplingRef.current) {
+            if (now - lastSampleTimeRef.current > throttleMs) {
+              lastSampleTimeRef.current = now;
+              questionAccumulatorRef.current.push(newScores);
+              console.log(`📸 Sample collected for Q${questionIndexRef.current}. Total: ${questionAccumulatorRef.current.length}`);
+
+              // Update aggregated view for UI
+              const aggregated = aggregateScores(questionAccumulatorRef.current);
+              setAggregatedScores({
+                ...aggregated,
+                sampleCount: questionAccumulatorRef.current.length,
+                timestamp: now,
               });
             }
           }
+          // --- SAMPLING LOGIC END ---
 
-          // Log to console for debugging (only every 30 frames to reduce spam)
-          if (scoreHistoryRef.current.length % 30 === 0) {
-            const emojiMap: Record<FacialExpression, string> = {
-              confident: '😊',
-              nervous: '😰',
-              distracted: '😑',
-            };
-            console.log("📊 Body Language Scores (Live):", {
-              "👁️ Eye Contact": `${eyeContact}%`,
-              "😊 Engagement": `${engagement}%`,
-              "🎯 Attention": `${attention}%`,
-              "📐 Stability": `${stability}%`,
-              "Expression": `${emojiMap[expressionResult.expression]} ${expressionResult.expression} (${expressionResult.confidence}%)`,
-            });
-          }
         } else {
           // No face detected - set scores to 0 and expression to null
           setScores({
@@ -317,7 +374,33 @@ export function useMediaPipeAnalysis(enabled: boolean = true, sessionId?: string
 
     faceMeshRef.current = faceMesh;
     return faceMesh;
-  }, [enabled, configureWasmModule]);
+  }, [enabled, configureWasmModule]); // removed isSampling dependnecy to avoid recreation
+
+  // Refs to track prop changes without re-initializing everything
+  const isSamplingRef = useRef(isSampling);
+  const questionIndexRef = useRef(questionIndex);
+
+  useEffect(() => {
+    isSamplingRef.current = isSampling;
+    questionIndexRef.current = questionIndex;
+
+    // Logic to handle START/STOP sampling
+    if (isSampling) {
+      console.log(`▶️ Started sampling for Question ${questionIndex}`);
+      questionAccumulatorRef.current = []; // Clear accumulator on start
+      lastSampleTimeRef.current = 0; // Reset timer to sample immediately
+    } else {
+      // Just stopped sampling?
+      // Logic to Save is handled by a separate function or effect? 
+      // The requirement says "When question ends -> Stop sampling -> Calculate average"
+      // This effect runs when isSampling changes to false.
+
+      if (questionAccumulatorRef.current.length > 0) {
+        console.log(`⏹️ Stopped sampling for Question ${questionIndex}. Calculating averages...`);
+        saveFinalDataForQuestion(questionIndex);
+      }
+    }
+  }, [isSampling, questionIndex]);
 
   /**
    * Initialize MediaPipe Hands
@@ -328,7 +411,7 @@ export function useMediaPipeAnalysis(enabled: boolean = true, sessionId?: string
     if (handsRef.current) {
       return handsRef.current;
     }
-    
+
     // CRITICAL: Runtime check before initialization
     // This prevents "scripts failed to load" errors
     if (typeof window === 'undefined' || !window.Hands) {
@@ -358,7 +441,7 @@ export function useMediaPipeAnalysis(enabled: boolean = true, sessionId?: string
       minTrackingConfidence: 0.5,
     });
 
-    hands.onResults((results) => {
+    hands.onResults((results: any) => {
       if (!enabled) return;
 
       try {
@@ -369,7 +452,7 @@ export function useMediaPipeAnalysis(enabled: boolean = true, sessionId?: string
 
         // Store hand landmarks for expression detection (hand near head = nervous)
         currentHandLandmarksRef.current = handLandmarks;
-        
+
         // Store all hand landmarks array for cheating detection
         currentHandLandmarksArrayRef.current = allHandLandmarks;
 
@@ -384,80 +467,6 @@ export function useMediaPipeAnalysis(enabled: boolean = true, sessionId?: string
     handsRef.current = hands;
     return hands;
   }, [enabled, configureWasmModule]);
-
-  /**
-   * Aggregate scores over time (calculate average)
-   * Also calculates dominant expression (most common over time)
-   */
-  const aggregateScores = (history: BodyLanguageScores[]): BodyLanguageScores & { dominantExpression?: FacialExpression | null } => {
-    if (history.length === 0) {
-      return { 
-        eyeContact: 0, 
-        engagement: 0, 
-        attention: 0, 
-        stability: 0,
-        expression: null,
-        expressionConfidence: 0,
-        faceDetected: false,
-      };
-    }
-
-    // Filter out scores where face was not detected
-    const validScores = history.filter(score => score.faceDetected && score.expression !== null);
-
-    if (validScores.length === 0) {
-      return {
-        eyeContact: 0,
-        engagement: 0,
-        attention: 0,
-        stability: 0,
-        expression: null,
-        expressionConfidence: 0,
-        faceDetected: false,
-      };
-    }
-
-    const sum = validScores.reduce(
-      (acc, score) => ({
-        eyeContact: acc.eyeContact + score.eyeContact,
-        engagement: acc.engagement + score.engagement,
-        attention: acc.attention + score.attention,
-        stability: acc.stability + score.stability,
-        expressionConfidence: acc.expressionConfidence + score.expressionConfidence,
-      }),
-      { eyeContact: 0, engagement: 0, attention: 0, stability: 0, expressionConfidence: 0 }
-    );
-
-    const count = validScores.length;
-    
-    // Calculate dominant expression (most common in history, only from valid scores)
-    const expressionCounts: Record<FacialExpression, number> = {
-      confident: 0,
-      nervous: 0,
-      distracted: 0,
-    };
-    
-    validScores.forEach(score => {
-      if (score.expression) {
-        expressionCounts[score.expression]++;
-      }
-    });
-    
-    const dominantExpression = Object.entries(expressionCounts).reduce((a, b) => 
-      expressionCounts[a[0] as FacialExpression] > expressionCounts[b[0] as FacialExpression] ? a : b
-    )[0] as FacialExpression;
-    
-    return {
-      eyeContact: Math.round(sum.eyeContact / count),
-      engagement: Math.round(sum.engagement / count),
-      attention: Math.round(sum.attention / count),
-      stability: Math.round(sum.stability / count),
-      expression: dominantExpression,
-      expressionConfidence: Math.round(sum.expressionConfidence / count),
-      faceDetected: true,
-      dominantExpression,
-    };
-  };
 
   /**
    * Wait for MediaPipe scripts to load from CDN
@@ -592,7 +601,7 @@ export function useMediaPipeAnalysis(enabled: boolean = true, sessionId?: string
           onFrame: async () => {
             // Guard: Check if still enabled and video is ready
             if (!enabled || !videoRef.current) return;
-            
+
             if (videoRef.current.readyState === videoRef.current.HAVE_ENOUGH_DATA) {
               // Share the same video frame between FaceMesh and Hands
               // This is more efficient than creating separate camera instances
@@ -622,15 +631,15 @@ export function useMediaPipeAnalysis(enabled: boolean = true, sessionId?: string
       // Mark as initialized
       initializationGuardRef.current = true;
       setIsInitialized(true);
-      
+
       console.log("✅ MediaPipe Analysis STARTED");
       console.log("📹 Webcam: ACTIVE (single shared instance)");
       console.log("🔍 Face Detection: ENABLED");
       console.log("✋ Hand Detection: ENABLED");
-      
+
     } catch (err: any) {
       console.error("❌ Error starting MediaPipe analysis:", err);
-      
+
       // Check if it's a WASM error
       const errorMessage = err.message || err.toString();
       if (errorMessage.includes('Module.arguments') || errorMessage.includes('WASM') || errorMessage.includes('RuntimeError')) {
@@ -639,7 +648,7 @@ export function useMediaPipeAnalysis(enabled: boolean = true, sessionId?: string
       } else {
         setError(err.message || "Failed to start webcam analysis. Please check camera permissions.");
       }
-      
+
       setIsInitialized(false);
       initializationGuardRef.current = false;
       globalInitializationGuard = false;
@@ -671,7 +680,7 @@ export function useMediaPipeAnalysis(enabled: boolean = true, sessionId?: string
         // Pause and stop tracks if present
         try {
           videoRef.current.pause();
-        } catch (_) {}
+        } catch (_) { }
 
         const src: any = videoRef.current.srcObject || (videoRef.current as any).mozSrcObject;
         if (src && typeof src.getTracks === 'function') {
@@ -679,9 +688,9 @@ export function useMediaPipeAnalysis(enabled: boolean = true, sessionId?: string
             src.getTracks().forEach((t: MediaStreamTrack) => {
               try {
                 t.stop();
-              } catch (_) {}
+              } catch (_) { }
             });
-          } catch (_) {}
+          } catch (_) { }
         }
 
         // Remove element from DOM
@@ -691,7 +700,7 @@ export function useMediaPipeAnalysis(enabled: boolean = true, sessionId?: string
         // Clear srcObject to release camera
         try {
           (videoRef.current as any).srcObject = null;
-        } catch (_) {}
+        } catch (_) { }
       } catch (err) {
         // Ignore errors during cleanup
       }
@@ -722,13 +731,14 @@ export function useMediaPipeAnalysis(enabled: boolean = true, sessionId?: string
     globalInitializationGuard = false;
     isInitializingRef.current = false;
     setIsInitialized(false);
-    setScores({ 
-      eyeContact: 0, 
-      engagement: 0, 
-      attention: 0, 
+    setScores({
+      eyeContact: 0,
+      engagement: 0,
+      attention: 0,
       stability: 0,
       expression: 'confident',
       expressionConfidence: 0,
+      faceDetected: false
     });
     setAggregatedScores({
       eyeContact: 0,
@@ -739,8 +749,9 @@ export function useMediaPipeAnalysis(enabled: boolean = true, sessionId?: string
       expressionConfidence: 0,
       sampleCount: 0,
       timestamp: Date.now(),
+      faceDetected: false,
     });
-    scoreHistoryRef.current = [];
+    questionAccumulatorRef.current = []; // Clear accumulator
     previousHeadPositionRef.current = null;
     previousHandPositionsRef.current = [];
     currentHandLandmarksRef.current = [];
@@ -771,16 +782,16 @@ export function useMediaPipeAnalysis(enabled: boolean = true, sessionId?: string
   }, [enabled, isInitialized]);
 
   /**
-   * Save final body language data when interview ends
-   * This should be called when the interview session is completed
+   * Save body language data for a specific question
    */
-  const saveFinalData = useCallback(async () => {
-    if (!sessionId || scoreHistoryRef.current.length === 0) {
+  const saveFinalDataForQuestion = useCallback(async (qIndex: number) => {
+    if (!sessionId || questionAccumulatorRef.current.length === 0) {
+      console.log(`⚠️ No samples collected for Q${qIndex}, skipping save.`);
       return;
     }
 
-    const finalAggregated = aggregateScores(scoreHistoryRef.current);
-    
+    const finalAggregated = aggregateScores(questionAccumulatorRef.current);
+
     try {
       await saveBodyLanguageData({
         sessionId,
@@ -788,28 +799,43 @@ export function useMediaPipeAnalysis(enabled: boolean = true, sessionId?: string
         engagement: finalAggregated.engagement,
         attention: finalAggregated.attention,
         stability: finalAggregated.stability,
-        expression: finalAggregated.expression,
+        expression: finalAggregated.expression as any,
         expressionConfidence: finalAggregated.expressionConfidence,
-        dominantExpression: finalAggregated.dominantExpression,
-        sampleCount: scoreHistoryRef.current.length,
+        dominantExpression: finalAggregated.dominantExpression as string,
+        sampleCount: questionAccumulatorRef.current.length,
         timestamp: Date.now(),
+        questionIndex: qIndex
       });
-      console.log("✅ Final body language data saved");
+      console.log(`✅ Body language data saved for Question ${qIndex} (${questionAccumulatorRef.current.length} samples)`);
+
+      // Clear accumulator after save
+      questionAccumulatorRef.current = [];
     } catch (error) {
-      console.error("❌ Error saving final body language data:", error);
+      console.error("❌ Error saving question body language data:", error);
     }
   }, [sessionId]);
+
+  /**
+   * Save final body language data when interview ends
+   * This should be called when the interview session is completed
+   * (Keeping this for legacy/cleanup, but main logic is now per-question)
+   */
+  const saveFinalData = useCallback(async () => {
+    // If there is data in accumulator, save it for current question
+    if (questionAccumulatorRef.current.length > 0) {
+      await saveFinalDataForQuestion(questionIndexRef.current);
+    }
+  }, [saveFinalDataForQuestion]);
 
   return {
     scores,
     aggregatedScores,
     isInitialized,
     error,
-    startAnalysis,
-    stopAnalysis,
-    saveFinalData, // Expose function to save final data when interview ends
-    videoElement: videoRef.current, // Expose video element for cheating detection
-    faceLandmarks: currentFaceLandmarksRef.current, // Expose face landmarks for cheating detection
-    handLandmarks: currentHandLandmarksArrayRef.current, // Expose hand landmarks for cheating detection
+    saveFinalData,
+    stopAnalysis, // Export stopAnalysis so it can be called externally
+    videoElement: videoRef.current,
+    faceLandmarks: currentFaceLandmarksRef.current,
+    handLandmarks: currentHandLandmarksArrayRef.current,
   };
 }
