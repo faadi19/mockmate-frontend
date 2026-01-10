@@ -10,7 +10,7 @@ import Button from "../components/ui/Button";
 import { useAuth } from "../contexts/AuthContext";
 import mmLogo from "../assets/mmLogo1-transparent.png"; // ✅ logo import
 import { ImagesPath } from "../utils/images";
-import { setDemoMode } from "../utils/demoMode";
+
 
 const HomePage = () => {
   const navigate = useNavigate();
@@ -117,48 +117,47 @@ const HomePage = () => {
           </div>
         )}
       </div>
-      <div className="text-text-primary relative z-10 max-w-[90%] lg:max-w-[80vw] mx-auto">
-        <header className="w-full mx-auto px-4 py-6 flex justify-between items-center">
+      <div className="text-text-primary relative z-10 max-w-[95%] lg:max-w-[80vw] mx-auto">
+        <header className="w-full mx-auto px-2 sm:px-4 py-4 sm:py-6 flex flex-col sm:flex-row justify-between items-center gap-4">
           <div className="flex items-center gap-2">
             <img
               src={mmLogo}
               alt="MockMate Logo"
-              className="w-[3vw] h-[3vw] min-w-[50px] min-h-[50px] object-contain block shrink-0 -translate-y-[1px] drop-shadow-[0_0_8px_rgb(var(--primary)/0.35)]"
+              className="w-[40px] h-[40px] sm:w-[3vw] sm:h-[3vw] min-w-[40px] min-h-[40px] object-contain block shrink-0 -translate-y-[1px] drop-shadow-[0_0_8px_rgb(var(--primary)/0.35)]"
             />
-            <span className="text-text-primary font-poppins-regular font-size-40px drop-shadow-[0_0_10px_rgb(var(--primary)/0.25)]">
+            <span className="text-text-primary font-poppins-regular text-2xl sm:text-3xl lg:font-size-40px drop-shadow-[0_0_10px_rgb(var(--primary)/0.25)]">
               <strong>M</strong>ock<strong>M</strong>ate
             </span>
           </div>
-          <div className="flex gap-4">
+          <div className="flex gap-2 sm:gap-4 w-full sm:w-auto justify-center">
             <Button
               variant="ghost"
               onClick={() => navigate("/login")}
-              size="lg"
+              size="default"
+              className="flex-1 sm:flex-none"
             >
               <span className="inline-flex items-center gap-2">
                 <ShieldCheck className="h-4 w-4" />
                 Log in
               </span>
             </Button>
-            <Button onClick={() => navigate("/signup")} size="lg">
+            <Button onClick={() => navigate("/signup")} size="default" className="flex-1 sm:flex-none">
               Sign up
             </Button>
           </div>
         </header>
 
         <main className="w-full mx-auto">
-          <section className="w-full mx-auto py-10 md:py-[4vw]">
-            <div className="w-full text-center">
+          <section className="w-full mx-auto py-6 sm:py-10 md:py-[4vw]">
+            <div className="w-full text-center px-2 sm:px-0">
               <motion.div
                 initial={reduceMotion ? false : { opacity: 0, y: 16 }}
                 animate={reduceMotion ? undefined : { opacity: 1, y: 0 }}
                 transition={{ duration: 0.6, ease: "easeOut" }}
                 className="flex flex-col items-center"
               >
-                {/* Badge removed as per request */}
-
                 <motion.h1
-                  className="font-size-62px font-poppins-bold leading-none md:font-size-60px mb-4 lg:mb-[1vw]"
+                  className="text-4xl sm:text-5xl lg:font-size-62px font-poppins-bold leading-tight mb-4 lg:mb-[1vw]"
                   initial={reduceMotion ? false : { opacity: 0, y: 18 }}
                   animate={reduceMotion ? undefined : { opacity: 1, y: 0 }}
                   transition={{ duration: 0.6, delay: 0.05, ease: "easeOut" }}
@@ -168,7 +167,7 @@ const HomePage = () => {
                 </motion.h1>
 
                 <motion.p
-                  className="font-size-20px font-poppins-regular md:font-size-22px text-text-secondary mb-5 lg:mb-[1.2vw] w-full max-w-3xl"
+                  className="text-lg sm:text-xl lg:font-size-22px font-poppins-regular text-text-secondary mb-6 lg:mb-[1.2vw] w-full max-w-3xl"
                   initial={reduceMotion ? false : { opacity: 0, y: 16 }}
                   animate={reduceMotion ? undefined : { opacity: 1, y: 0 }}
                   transition={{ duration: 0.6, delay: 0.12, ease: "easeOut" }}

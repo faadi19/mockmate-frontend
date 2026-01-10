@@ -125,20 +125,20 @@ const ContentManagementPage = () => {
                     {/* Question Bank (Right) */}
                     <div className="lg:col-span-8 space-y-6">
                         <Card>
-                            <CardHeader className="flex flex-row justify-between items-center space-y-0 pb-6 border-b border-border">
+                            <CardHeader className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 pb-6 border-b border-border">
                                 <CardTitle className="text-xl flex items-center gap-2">
                                     <Database className="w-5 h-5 text-primary" /> {selectedRole?.name || "Select Role"} Bank
                                 </CardTitle>
-                                <div className="flex gap-2">
-                                    <div className="relative">
+                                <div className="flex flex-col xs:flex-row gap-2 w-full sm:w-auto">
+                                    <div className="relative flex-1">
                                         <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 w-4 h-4 text-text-secondary" />
                                         <input
                                             type="text"
                                             placeholder="Search questions..."
-                                            className="pl-9 pr-4 py-1.5 bg-background border border-border rounded-lg text-sm focus:outline-none focus:ring-1 focus:ring-primary"
+                                            className="w-full pl-9 pr-4 py-1.5 bg-background border border-border rounded-lg text-sm focus:outline-none focus:ring-1 focus:ring-primary"
                                         />
                                     </div>
-                                    <Button size="sm" icons={<Plus className="w-4 h-4" />}>Add Question</Button>
+                                    <Button size="sm" icons={<Plus className="w-4 h-4" />}>Add</Button>
                                 </div>
                             </CardHeader>
                             <CardContent className="p-0">

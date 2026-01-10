@@ -1,6 +1,5 @@
 import { useState, useEffect } from "react";
 import { useParams, useNavigate } from "react-router-dom";
-import { motion } from "framer-motion";
 import AdminLayout from "../components/layout/AdminLayout";
 import ContentHeader from "../components/layout/ContentHeader";
 import AnimatedPage from "../components/ui/AnimatedPage";
@@ -25,70 +24,41 @@ const UserDetailPage = () => {
     const [userData, setUserData] = useState<any>(null);
     const [loading, setLoading] = useState(true);
 
+    // Interview History Pagination
+    const [interviews, setInterviews] = useState<any[]>([]);
+    const [currentPage, setCurrentPage] = useState(1);
+    const [totalPages, setTotalPages] = useState(1);
+    const [loadingInterviews, setLoadingInterviews] = useState(false);
+
     useEffect(() => {
         const fetchUserData = async () => {
+            if (!id || id === 'undefined') {
+                setLoading(false);
+                return;
+            }
+
             try {
                 const token = localStorage.getItem("token");
-
-                // 1. Fetch User Profile
-                const userRes = await fetch(`${API_BASE_URL}/api/admin/users`, {
+                const userRes = await fetch(`${API_BASE_URL}/api/admin/profile/${id}`, {
                     headers: { Authorization: `Bearer ${token}` }
                 });
-                const allUsers = await userRes.json();
-                const matchedUser = Array.isArray(allUsers) ? allUsers.find((u: any) => u._id === id || u.id === id) : null;
 
-                if (!matchedUser) {
-                    console.error("User not found");
-                    // You might want to handle this case better (e.g. redirect or show error)
-                }
-
-                // 2. Fetch User Interviews
-                const interviewRes = await fetch(`${API_BASE_URL}/api/admin/interviews`, {
-                    headers: { Authorization: `Bearer ${token}` }
-                });
-                const allInterviews = await interviewRes.json();
-                const interviews = (allInterviews.interviews || allInterviews).filter((int: any) =>
-                    int.userId === id || int.user?._id === id || (matchedUser && matchedUser._id && int.userId === matchedUser._id)
-                );
-
-                // 3. Calculate Stats
-                let totalScore = 0;
-                let violationCount = 0;
-                let completedCount = 0;
-
-                const mappedInterviews = interviews.map((int: any) => {
-                    const score = int.overallScore || int.score || 0;
-                    totalScore += score;
-                    if (int.status === 'Completed' || !int.isTerminated) completedCount++;
-
-                    const vCount = int.violations ? int.violations.length : 0;
-                    violationCount += vCount;
-
-                    return {
-                        id: int.sessionId || int._id,
-                        role: int.role || int.setup?.role || "N/A",
-                        date: int.createdAt ? new Date(int.createdAt).toLocaleDateString() : "Recent",
-                        score: score,
-                        status: int.isTerminated ? "Terminated" : "Completed",
-                        violations: vCount
-                    };
-                });
-
-                const avgScore = mappedInterviews.length > 0 ? (totalScore / mappedInterviews.length).toFixed(1) : 0;
+                const data = await userRes.json();
+                const profile = data.user || data.profile || data;
+                const stats = data.stats || profile.stats;
 
                 setUserData({
-                    id: matchedUser?._id || id,
-                    name: matchedUser?.name || "Unknown User",
-                    email: matchedUser?.email || "N/A",
-                    role: matchedUser?.role || "User",
-                    status: matchedUser?.status || "Active",
-                    joinedDate: matchedUser?.createdAt ? new Date(matchedUser.createdAt).toLocaleDateString() : "N/A",
-                    totalInterviews: mappedInterviews.length,
-                    avgScore: avgScore,
-                    violationCount: violationCount,
-                    improvement: "N/A", // Calculation requires more historical analysis, skipping for now
-                    skills: matchedUser?.skills || ["N/A"],
-                    interviews: mappedInterviews
+                    id: profile._id || id,
+                    name: profile.name || "Unknown User",
+                    email: profile.email || "N/A",
+                    role: profile.role || "User",
+                    status: profile.status || "Active",
+                    joinedDate: profile.createdAt ? new Date(profile.createdAt).toLocaleDateString() : "N/A",
+                    totalInterviews: stats?.totalInterviews || 0,
+                    avgScore: stats?.avgScore || 0,
+                    violationCount: stats?.totalViolations ?? profile.violationCount ?? 0,
+                    improvement: profile.improvement || "N/A",
+                    skills: profile.skills || []
                 });
 
             } catch (err) {
@@ -98,8 +68,44 @@ const UserDetailPage = () => {
             }
         };
 
-        if (id) fetchUserData();
+        fetchUserData();
     }, [id]);
+
+    useEffect(() => {
+        const fetchInterviews = async () => {
+            if (!id || id === 'undefined' || !userData) return;
+
+            setLoadingInterviews(true);
+            try {
+                const token = localStorage.getItem("token");
+                const response = await fetch(`${API_BASE_URL}/api/admin/interviews?userId=${id}&page=${currentPage}&limit=10`, {
+                    headers: { Authorization: `Bearer ${token}` }
+                });
+
+                if (response.ok) {
+                    const data = await response.json();
+                    const rawInterviews = data.interviews || data || [];
+
+                    const mapped = (Array.isArray(rawInterviews) ? rawInterviews : []).map((int: any) => ({
+                        id: int.sessionId || int._id,
+                        role: int.role || int.setup?.role || "N/A",
+                        date: int.createdAt ? new Date(int.createdAt).toLocaleDateString() : "Recent",
+                        score: int.overallScore || int.score || 0,
+                        status: int.status || (int.isTerminated ? "Terminated" : "Completed"),
+                    }));
+
+                    setInterviews(mapped);
+                    setTotalPages(data.totalPages || 1);
+                }
+            } catch (err) {
+                console.error("Failed to fetch interviews:", err);
+            } finally {
+                setLoadingInterviews(false);
+            }
+        };
+
+        fetchInterviews();
+    }, [id, currentPage, userData?.id]);
 
     if (loading) {
         return (
@@ -114,7 +120,10 @@ const UserDetailPage = () => {
     if (!userData) {
         return (
             <AdminLayout>
-                <div className="p-8 text-center text-red-400">User not found</div>
+                <div className="p-8 text-center">
+                    <p className="text-red-400 text-lg font-medium mb-4">User not found</p>
+                    <Button onClick={() => navigate('/admin/users')}>Back to User Management</Button>
+                </div>
             </AdminLayout>
         );
     }
@@ -129,7 +138,7 @@ const UserDetailPage = () => {
                 />
 
                 <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-                    {/* Left Column: Profile Card */}
+                    {/* Profile Card */}
                     <div className="lg:col-span-1 space-y-6">
                         <Card className="overflow-hidden">
                             <div className="h-24 bg-gradient-to-r from-primary/30 to-purple-600/30" />
@@ -178,49 +187,25 @@ const UserDetailPage = () => {
                             </CardContent>
                         </Card>
 
-                        <Card>
-                            <CardHeader>
-                                <CardTitle className="text-lg">Key Skills</CardTitle>
-                            </CardHeader>
-                            <CardContent className="flex flex-wrap gap-2">
-                                {userData.skills.map(skill => (
-                                    <span key={skill} className="px-3 py-1.5 bg-card border border-border rounded-xl text-sm text-text-secondary">
-                                        {skill}
-                                    </span>
-                                ))}
-                            </CardContent>
-                        </Card>
+                        {userData.skills.length > 0 && (
+                            <Card>
+                                <CardHeader>
+                                    <CardTitle className="text-lg">Key Skills</CardTitle>
+                                </CardHeader>
+                                <CardContent className="flex flex-wrap gap-2">
+                                    {userData.skills.map((skill: string) => (
+                                        <span key={skill} className="px-3 py-1.5 bg-card border border-border rounded-xl text-sm text-text-secondary">
+                                            {skill}
+                                        </span>
+                                    ))}
+                                </CardContent>
+                            </Card>
+                        )}
                     </div>
 
-                    {/* Right Column: Performance & History */}
+                    {/* Interview History */}
                     <div className="lg:col-span-2 space-y-6">
-                        {/* Stats Overview */}
-                        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                            <Card className="bg-primary/5 border-primary/20">
-                                <CardContent className="p-6">
-                                    <div className="flex justify-between items-center">
-                                        <div>
-                                            <p className="text-text-secondary text-sm mb-1 uppercase tracking-wider font-bold">Average Score</p>
-                                            <h3 className="text-3xl font-bold text-text-primary">{userData.avgScore}%</h3>
-                                        </div>
-                                        <Target className="w-8 h-8 text-primary opacity-50" />
-                                    </div>
-                                </CardContent>
-                            </Card>
-                            <Card className="bg-green-500/5 border-green-500/20">
-                                <CardContent className="p-6">
-                                    <div className="flex justify-between items-center">
-                                        <div>
-                                            <p className="text-text-secondary text-sm mb-1 uppercase tracking-wider font-bold">Improvement</p>
-                                            <h3 className="text-3xl font-bold text-green-400">{userData.improvement}</h3>
-                                        </div>
-                                        <ShieldCheck className="w-8 h-8 text-green-400 opacity-50" />
-                                    </div>
-                                </CardContent>
-                            </Card>
-                        </div>
 
-                        {/* Interview History */}
                         <Card>
                             <CardHeader>
                                 <CardTitle className="text-xl">Interview History</CardTitle>
@@ -232,51 +217,90 @@ const UserDetailPage = () => {
                                             <tr className="bg-primary/5 border-b border-border">
                                                 <th className="px-6 py-4 text-xs font-semibold uppercase text-text-secondary">ID / Date</th>
                                                 <th className="px-6 py-4 text-xs font-semibold uppercase text-text-secondary">Role</th>
-                                                <th className="px-6 py-4 text-xs font-semibold uppercase text-text-secondary">Score</th>
+                                                <th className="px-6 py-4 text-xs font-semibold uppercase text-text-secondary text-center">Score</th>
                                                 <th className="px-6 py-4 text-xs font-semibold uppercase text-text-secondary">Result</th>
                                                 <th className="px-6 py-4 text-xs font-semibold uppercase text-text-secondary text-right">Action</th>
                                             </tr>
                                         </thead>
                                         <tbody className="divide-y divide-border">
-                                            {userData.interviews.map(interview => (
-                                                <tr key={interview.id} className="hover:bg-primary/5 transition-colors group">
-                                                    <td className="px-6 py-4">
-                                                        <div className="flex flex-col">
-                                                            <span className="font-medium text-text-primary">#{interview.id}</span>
-                                                            <span className="text-xs text-text-secondary">{interview.date}</span>
+                                            {loadingInterviews ? (
+                                                <tr>
+                                                    <td colSpan={5} className="px-6 py-12 text-center text-text-secondary">
+                                                        <div className="flex flex-col items-center gap-2">
+                                                            <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary"></div>
+                                                            <span>Loading History...</span>
                                                         </div>
                                                     </td>
-                                                    <td className="px-6 py-4">
-                                                        <span className="text-sm text-text-primary">{interview.role}</span>
-                                                    </td>
-                                                    <td className="px-6 py-4">
-                                                        <div className="flex items-center gap-2">
+                                                </tr>
+                                            ) : interviews.length === 0 ? (
+                                                <tr>
+                                                    <td colSpan={5} className="px-6 py-8 text-center text-text-secondary">No interview history found.</td>
+                                                </tr>
+                                            ) : (
+                                                interviews.map((interview: any) => (
+                                                    <tr key={interview.id} className="hover:bg-primary/5 transition-colors group">
+                                                        <td className="px-6 py-4">
+                                                            <div className="flex flex-col">
+                                                                <span className="font-medium text-text-primary">#{interview.id?.substring(0, 8)}...</span>
+                                                                <span className="text-xs text-text-secondary">{interview.date}</span>
+                                                            </div>
+                                                        </td>
+                                                        <td className="px-6 py-4">
+                                                            <span className="text-sm text-text-primary">{interview.role}</span>
+                                                        </td>
+                                                        <td className="px-6 py-4 text-center">
                                                             <span className={`font-bold ${interview.score >= 80 ? 'text-green-400' : interview.score >= 60 ? 'text-yellow-400' : 'text-red-400'}`}>
                                                                 {interview.score}%
                                                             </span>
-                                                        </div>
-                                                    </td>
-                                                    <td className="px-6 py-4">
-                                                        <span className={`px-2.5 py-0.5 rounded-full text-xs font-medium ${interview.status === 'Completed' ? 'text-green-400 bg-green-500/10' : 'text-red-400 bg-red-500/10'
-                                                            }`}>
-                                                            {interview.status}
-                                                        </span>
-                                                    </td>
-                                                    <td className="px-6 py-4 text-right">
-                                                        <Button
-                                                            variant="ghost"
-                                                            size="sm"
-                                                            className="w-8 h-8 p-0"
-                                                            onClick={() => navigate(`/admin/interviews/${interview.id}`)}
-                                                        >
-                                                            <ChevronRight className="w-5 h-5" />
-                                                        </Button>
-                                                    </td>
-                                                </tr>
-                                            ))}
+                                                        </td>
+                                                        <td className="px-6 py-4">
+                                                            <span className={`px-2.5 py-0.5 rounded-full text-xs font-medium ${interview.status === 'Completed' ? 'text-green-400 bg-green-500/10' : 'text-red-400 bg-red-500/10'}`}>
+                                                                {interview.status}
+                                                            </span>
+                                                        </td>
+                                                        <td className="px-6 py-4 text-right">
+                                                            <Button
+                                                                variant="ghost"
+                                                                size="sm"
+                                                                className="w-8 h-8 p-0"
+                                                                onClick={() => navigate(`/admin/interviews/${interview.id}`)}
+                                                            >
+                                                                <ChevronRight className="w-5 h-5" />
+                                                            </Button>
+                                                        </td>
+                                                    </tr>
+                                                ))
+                                            )}
                                         </tbody>
                                     </table>
                                 </div>
+
+                                {/* Pagination Controls */}
+                                {totalPages > 1 && (
+                                    <div className="flex items-center justify-between px-6 py-4 border-t border-border bg-card/30">
+                                        <p className="text-sm text-text-secondary">
+                                            Page <span className="text-text-primary font-medium">{currentPage}</span> of {totalPages}
+                                        </p>
+                                        <div className="flex gap-2">
+                                            <Button
+                                                variant="outline"
+                                                size="sm"
+                                                disabled={currentPage === 1 || loadingInterviews}
+                                                onClick={() => setCurrentPage(p => p - 1)}
+                                            >
+                                                Back
+                                            </Button>
+                                            <Button
+                                                variant="outline"
+                                                size="sm"
+                                                disabled={currentPage === totalPages || loadingInterviews}
+                                                onClick={() => setCurrentPage(p => p + 1)}
+                                            >
+                                                Next
+                                            </Button>
+                                        </div>
+                                    </div>
+                                )}
                             </CardContent>
                         </Card>
                     </div>

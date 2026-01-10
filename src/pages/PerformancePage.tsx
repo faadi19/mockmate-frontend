@@ -11,6 +11,7 @@ import ProgressBar from "../components/ui/ProgressBar";
 import Button from "../components/ui/Button";
 
 import { Bar, Line } from "react-chartjs-2";
+import { TrendingUp, Briefcase } from "lucide-react";
 import {
   Chart as ChartJS,
   CategoryScale,
@@ -319,9 +320,9 @@ const PerformancePage = () => {
 
   const allInterviewLabels = hasData
     ? displayData.map(item => item.label)
-    : ["No Data"];
+    : [];
 
-  const allGraphScores = hasData ? displayData.map(item => item.score) : [0];
+  const allGraphScores = hasData ? displayData.map(item => item.score) : [];
   const allInterviewIds = hasData ? displayData.map(item => item.id) : [];
 
   // Calculate pagination
@@ -330,9 +331,24 @@ const PerformancePage = () => {
   const endIndex = Math.min(startIndex + INTERVIEWS_PER_PAGE, allInterviewLabels.length);
 
   // Get current page data
-  const interviewLabels = allInterviewLabels.slice(startIndex, endIndex);
-  const graphScores = allGraphScores.slice(startIndex, endIndex);
-  const interviewIds = allInterviewIds.slice(startIndex, endIndex);
+  const baseLabels = allInterviewLabels.slice(startIndex, endIndex);
+  const baseScores = allGraphScores.slice(startIndex, endIndex);
+  const baseIds = allInterviewIds.slice(startIndex, endIndex);
+
+  // Pad data to ensure it starts from left and maintains consistent scale width
+  // This prevents a single bar from being centered in the middle of the chart
+  const interviewLabels = [...baseLabels];
+  const graphScores = [...baseScores];
+  const interviewIds = [...baseIds];
+
+  if (hasData && interviewLabels.length < INTERVIEWS_PER_PAGE) {
+    const padCount = INTERVIEWS_PER_PAGE - interviewLabels.length;
+    for (let i = 0; i < padCount; i++) {
+      interviewLabels.push(""); // Empty label for padding
+      graphScores.push(null as any); // Null data point won't be rendered
+      interviewIds.push(`pad-${i}`); // Unique ID for padding elements
+    }
+  }
 
   // Handle page changes
   const handleNextPage = () => {
@@ -608,6 +624,16 @@ const PerformancePage = () => {
                   {loading ? (
                     <div className="absolute inset-0 flex items-center justify-center">
                       <div className="text-primary text-sm">Loading...</div>
+                    </div>
+                  ) : !hasData ? (
+                    <div className="absolute inset-0 flex flex-col items-center justify-center text-center p-6 bg-primary/[0.02] border border-dashed border-border/50 rounded-2xl">
+                      <div className="w-12 h-12 bg-primary/10 rounded-full flex items-center justify-center mb-4">
+                        <TrendingUp className="w-6 h-6 text-primary opacity-50" />
+                      </div>
+                      <h4 className="text-base font-semibold text-text-primary mb-1">No Performance Data Yet</h4>
+                      <p className="text-sm text-text-secondary max-w-xs">
+                        Complete your first interview for <span className="text-primary font-medium">{roleLabel}</span> to generate performance analytics.
+                      </p>
                     </div>
                   ) : (
                     <>

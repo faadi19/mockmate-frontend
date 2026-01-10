@@ -24,8 +24,10 @@ import ConfirmationModal from "../components/ui/ConfirmationModal";
 const ViolationsPanel = () => {
     const reduceMotion = useReducedMotion();
     const [searchQuery, setSearchQuery] = useState("");
-    const [typeFilter, setTypeFilter] = useState("all");
+    const [violations, setViolations] = useState<any[]>([]);
+    const [loading, setLoading] = useState(true);
 
+    const [typeFilter, setTypeFilter] = useState("all");
     const [previewModal, setPreviewModal] = useState<{
         isOpen: boolean;
         violation: any | null;
@@ -34,81 +36,74 @@ const ViolationsPanel = () => {
         violation: null
     });
 
-    const [violations, setViolations] = useState<any[]>([]);
-    const [loading, setLoading] = useState(true);
+    // Pagination state
+    const [currentPage, setCurrentPage] = useState(1);
+    const [totalPages, setTotalPages] = useState(1);
+    const [totalViolations, setTotalViolations] = useState(0);
 
-    useEffect(() => {
-        const fetchViolations = async () => {
-            try {
-                const token = localStorage.getItem("token");
-                const response = await fetch(`${API_BASE_URL}/api/admin/violations`, {
-                    headers: {
-                        Authorization: `Bearer ${token}`,
-                    },
+    const fetchViolations = async () => {
+        setLoading(true);
+        try {
+            const token = localStorage.getItem("token");
+            const queryParams = new URLSearchParams({
+                page: currentPage.toString(),
+                limit: "10",
+                search: searchQuery,
+                type: typeFilter !== 'all' ? typeFilter : ''
+            });
+
+            const response = await fetch(`${API_BASE_URL}/api/admin/violations?${queryParams}`, {
+                headers: {
+                    Authorization: `Bearer ${token}`,
+                },
+            });
+
+            if (response.ok) {
+                const data = await response.json();
+                const rawViolations = data.violations || data.data || data || [];
+                const extractedViolations: any[] = (Array.isArray(rawViolations) ? rawViolations : []).map((v: any, index: number) => {
+                    const vType = v.type || v.violationType || "Unknown Violation";
+                    return {
+                        id: v._id || `v-${index}`,
+                        type: vType,
+                        user: v.userId?.name || "Unknown",
+                        interviewId: v.interviewId?._id || v.interviewId || "Unknown",
+                        timestamp: v.timestamp ? new Date(v.timestamp).toLocaleString() : new Date().toLocaleString(),
+                        action: v.actionTaken || "Flagged",
+                        critical: v.actionTaken === "Terminated" || vType.includes("Identity"),
+                        screenshot: v.screenshotUrl || v.screenshot || null
+                    };
                 });
 
-                if (response.ok) {
-                    const data = await response.json();
-                    const rawViolations = data.violations || data || [];
-                    const extractedViolations: any[] = rawViolations.map((v: any, index: number) => {
-                        console.log("Raw Violation:", v); // Debug log
-                        const vType = v.type || v.violationType || "Unknown Violation";
-                        return {
-                            id: v._id || `v-${index}`,
-                            type: vType,
-                            user: v.userId?.name || "Unknown",
-                            interviewId: v.interviewId?._id || v.interviewId || "Unknown",
-                            timestamp: v.timestamp ? new Date(v.timestamp).toLocaleString() : new Date().toLocaleString(),
-                            action: v.actionTaken || "Flagged",
-                            critical: v.actionTaken === "Terminated" || vType.includes("Identity"),
-                            screenshot: v.screenshotUrl || v.screenshot || null
-                        };
-                    });
-
-                    // Sort by timestamp descending (newest first)
-                    // Note: If timestamp is a string, simple sort might generally work or need parsing.
-                    extractedViolations.sort((a, b) => new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime());
-
-                    setViolations(extractedViolations);
-                }
-            } catch (err) {
-                console.error("Failed to fetch violations:", err);
-            } finally {
-                setLoading(false);
+                setViolations(extractedViolations);
+                setTotalPages(data.totalPages || 1);
+                setTotalViolations(data.totalResults || data.totalViolations || extractedViolations.length);
             }
-        };
+        } catch (err) {
+            console.error("Failed to fetch violations:", err);
+        } finally {
+            setLoading(false);
+        }
+    };
 
+    useEffect(() => {
         fetchViolations();
-    }, []);
+    }, [currentPage, searchQuery, typeFilter]);
 
     const filteredViolations = useMemo(() => {
         return violations.filter(v => {
-            const matchesSearch = (v.user || "").toLowerCase().includes(searchQuery.toLowerCase()) ||
-                (v.interviewId || "").toLowerCase().includes(searchQuery.toLowerCase());
+            if (typeFilter === "all") return true;
+            const type = v.type.toLowerCase();
+            const filter = typeFilter.toLowerCase();
 
-            let matchesType = false;
-            if (typeFilter === "all") {
-                matchesType = true;
-            } else {
-                const type = v.type.toLowerCase().replace(/\s/g, ''); // e.g. "identitymismatch"
-                const filter = typeFilter.toLowerCase();
+            if (filter === "identitymismatch") return type.includes("face") || type.includes("identity");
+            if (filter === "cameraoff") return type.includes("camera");
+            if (filter === "multiplefaces") return type.includes("multiple");
+            if (filter === "phonedetected") return type.includes("phone");
 
-                if (filter === "identitymismatch") {
-                    // Check for both "Face" and "Identity"
-                    matchesType = type.includes("face") || type.includes("identity");
-                } else if (filter === "cameraoff") {
-                    matchesType = type.includes("camera");
-                } else if (filter === "multiplefaces") {
-                    matchesType = type.includes("multiple");
-                } else if (filter === "phonedetected") {
-                    matchesType = type.includes("phone");
-                } else {
-                    matchesType = type.includes(filter);
-                }
-            }
-            return matchesSearch && matchesType;
+            return type.includes(filter);
         });
-    }, [searchQuery, typeFilter, violations]);
+    }, [violations, typeFilter]);
 
     const getIcon = (type: string) => {
         const t = type.toLowerCase();
@@ -135,13 +130,19 @@ const ViolationsPanel = () => {
                             type="text"
                             placeholder="Search by User or Interview ID..."
                             value={searchQuery}
-                            onChange={(e) => setSearchQuery(e.target.value)}
+                            onChange={(e) => {
+                                setSearchQuery(e.target.value);
+                                setCurrentPage(1);
+                            }}
                             className="w-full pl-10 pr-4 py-2 bg-card border border-border rounded-xl focus:outline-none focus:ring-2 focus:ring-primary/35 text-sm"
                         />
                     </div>
                     <select
                         value={typeFilter}
-                        onChange={(e) => setTypeFilter(e.target.value)}
+                        onChange={(e) => {
+                            setTypeFilter(e.target.value);
+                            setCurrentPage(1);
+                        }}
                         className="px-4 py-2 bg-card border border-border rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-primary/35"
                     >
                         <option value="all">All Types</option>
@@ -159,15 +160,24 @@ const ViolationsPanel = () => {
                             <table className="w-full text-left border-collapse">
                                 <thead>
                                     <tr className="bg-primary/5 border-b border-border">
-                                        <th className="px-6 py-4 text-xs font-semibold uppercase tracking-wider text-text-secondary">Type / Timestamp</th>
-                                        <th className="px-6 py-4 text-xs font-semibold uppercase tracking-wider text-text-secondary">User</th>
-                                        <th className="px-6 py-4 text-xs font-semibold uppercase tracking-wider text-text-secondary">Interview</th>
-                                        <th className="px-6 py-4 text-xs font-semibold uppercase tracking-wider text-text-secondary">System Action</th>
-                                        <th className="px-6 py-4 text-xs font-semibold uppercase tracking-wider text-text-secondary text-center">Evidence</th>
+                                        <th className="px-4 sm:px-6 py-4 text-xs font-semibold uppercase tracking-wider text-text-secondary text-left">Type / Time</th>
+                                        <th className="hidden sm:table-cell px-6 py-4 text-xs font-semibold uppercase tracking-wider text-text-secondary text-center">User</th>
+                                        <th className="hidden md:table-cell px-6 py-4 text-xs font-semibold uppercase tracking-wider text-text-secondary text-center">Interview</th>
+                                        <th className="px-4 sm:px-6 py-4 text-xs font-semibold uppercase tracking-wider text-text-secondary text-center">Action</th>
+                                        <th className="px-4 sm:px-6 py-4 text-xs font-semibold uppercase tracking-wider text-text-secondary text-center">Evidence</th>
                                     </tr>
                                 </thead>
                                 <tbody className="divide-y divide-border">
-                                    {filteredViolations.length === 0 ? (
+                                    {loading ? (
+                                        <tr>
+                                            <td colSpan={5} className="px-6 py-12 text-center">
+                                                <div className="flex flex-col items-center gap-3">
+                                                    <div className="w-8 h-8 border-2 border-primary/20 border-t-primary rounded-full animate-spin" />
+                                                    <p className="text-sm text-text-secondary">Loading security logs...</p>
+                                                </div>
+                                            </td>
+                                        </tr>
+                                    ) : filteredViolations.length === 0 ? (
                                         <tr>
                                             <td colSpan={5} className="px-6 py-12 text-center text-text-secondary italic">
                                                 No security flags found.
@@ -182,27 +192,30 @@ const ViolationsPanel = () => {
                                                 transition={{ delay: idx * 0.05 }}
                                                 className={`hover:bg-primary/5 transition-colors group ${v.critical ? 'bg-red-500/[0.02]' : ''}`}
                                             >
-                                                <td className="px-6 py-4">
+                                                <td className="px-4 sm:px-6 py-4">
                                                     <div className="flex flex-col">
-                                                        <div className="flex items-center gap-2 font-medium text-text-primary">
+                                                        <div className="flex items-center gap-2 font-medium text-text-primary text-xs sm:text-sm whitespace-nowrap">
                                                             {getIcon(v.type)}
-                                                            {v.type}
+                                                            <span>{v.type}</span>
                                                         </div>
-                                                        <div className="flex items-center gap-1.5 text-[11px] text-text-secondary mt-1">
+                                                        <div className="flex items-center gap-1.5 text-[10px] sm:text-[11px] text-text-secondary mt-1 whitespace-nowrap">
                                                             <Calendar className="w-3 h-3" /> {v.timestamp}
+                                                        </div>
+                                                        <div className="sm:hidden text-[9px] text-text-secondary mt-1 font-medium">
+                                                            Candidate: {v.user}
                                                         </div>
                                                     </div>
                                                 </td>
-                                                <td className="px-6 py-4">
-                                                    <div className="flex items-center gap-2 text-sm text-text-primary font-medium">
+                                                <td className="hidden sm:table-cell px-6 py-4">
+                                                    <div className="flex items-center justify-center gap-2 text-sm text-text-primary font-medium whitespace-nowrap">
                                                         <UserIcon className="w-4 h-4 text-text-secondary" /> {v.user}
                                                     </div>
                                                 </td>
-                                                <td className="px-6 py-4">
-                                                    <code className="text-xs bg-primary/10 text-primary px-2 py-1 rounded">#{v.interviewId}</code>
+                                                <td className="hidden md:table-cell px-6 py-4 text-center">
+                                                    <code className="text-xs bg-primary/10 text-primary px-2 py-1 rounded whitespace-nowrap font-mono">{v.interviewId}</code>
                                                 </td>
-                                                <td className="px-6 py-4">
-                                                    <div className={`inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-xs font-medium ${v.action === 'Terminated' ? 'text-red-400 bg-red-500/10' :
+                                                <td className="px-4 sm:px-6 py-4 text-center">
+                                                    <div className={`inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-[10px] sm:text-xs font-medium whitespace-nowrap ${v.action === 'Terminated' ? 'text-red-400 bg-red-500/10' :
                                                         v.action === 'Flagged' ? 'text-yellow-400 bg-yellow-500/10' :
                                                             'text-green-400 bg-green-500/10'
                                                         }`}>
@@ -212,22 +225,22 @@ const ViolationsPanel = () => {
                                                         {v.action}
                                                     </div>
                                                 </td>
-                                                <td className="px-6 py-4 text-center">
+                                                <td className="px-4 sm:px-6 py-4 text-center">
                                                     {v.screenshot ? (
                                                         <div className="flex justify-center">
                                                             <Button
                                                                 variant="ghost"
                                                                 size="sm"
-                                                                className="bg-primary/5 hover:bg-primary/10 border border-primary/10 hover:border-primary/20"
+                                                                className="h-7 sm:h-8 px-2 sm:px-3 text-[10px] sm:text-xs bg-primary/5 hover:bg-primary/10 border border-primary/10 hover:border-primary/20"
                                                                 onClick={() => setPreviewModal({ isOpen: true, violation: v })}
-                                                                icons={<Eye className="w-4 h-4" />}
+                                                                icons={<Eye className="w-3.5 h-3.5 sm:w-4 sm:h-4" />}
                                                                 iconsPosition="left"
                                                             >
-                                                                Review
+                                                                <span className="hidden xs:inline">Review</span>
                                                             </Button>
                                                         </div>
                                                     ) : (
-                                                        <span className="text-xs text-text-secondary italic">No Data</span>
+                                                        <span className="text-[10px] sm:text-xs text-text-secondary italic">None</span>
                                                     )}
                                                 </td>
                                             </motion.tr>
@@ -238,6 +251,58 @@ const ViolationsPanel = () => {
                         </div>
                     </CardContent>
                 </Card>
+
+                {/* Pagination Controls */}
+                {totalPages > 1 && (
+                    <div className="flex flex-col sm:flex-row items-center justify-between gap-4 mt-6 px-2">
+                        <p className="text-sm text-text-secondary order-2 sm:order-1">
+                            Showing <span className="font-semibold text-text-primary">{violations.length}</span> of <span className="font-semibold text-text-primary">{totalViolations}</span> flags
+                        </p>
+                        <div className="flex items-center gap-2 order-1 sm:order-2">
+                            <Button
+                                variant="ghost"
+                                size="sm"
+                                onClick={() => setCurrentPage(prev => Math.max(1, prev - 1))}
+                                disabled={currentPage === 1}
+                                className="px-3"
+                            >
+                                Previous
+                            </Button>
+                            <div className="flex items-center gap-1">
+                                {Array.from({ length: Math.min(5, totalPages) }, (_, i) => {
+                                    let pageNum = i + 1;
+                                    if (totalPages > 5 && currentPage > 3) {
+                                        pageNum = currentPage - 3 + i + 1;
+                                        if (pageNum > totalPages) pageNum = totalPages - (4 - i);
+                                    }
+                                    if (pageNum <= 0) return null;
+
+                                    return (
+                                        <button
+                                            key={pageNum}
+                                            onClick={() => setCurrentPage(pageNum)}
+                                            className={`w-8 h-8 rounded-lg text-xs font-medium transition-all ${currentPage === pageNum
+                                                ? "bg-primary text-white shadow-lg shadow-primary/25"
+                                                : "text-text-secondary hover:bg-primary/10 hover:text-primary"
+                                                }`}
+                                        >
+                                            {pageNum}
+                                        </button>
+                                    );
+                                })}
+                            </div>
+                            <Button
+                                variant="ghost"
+                                size="sm"
+                                onClick={() => setCurrentPage(prev => Math.min(totalPages, prev + 1))}
+                                disabled={currentPage === totalPages}
+                                className="px-3"
+                            >
+                                Next
+                            </Button>
+                        </div>
+                    </div>
+                )}
 
                 {/* Evidence Preview Modal */}
                 <ConfirmationModal

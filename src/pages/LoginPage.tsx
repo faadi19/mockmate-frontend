@@ -42,13 +42,13 @@ const LoginPage = () => {
   const fromPath = (location.state as any)?.from;
 
   const handleSubmit = async (e: React.FormEvent) => {
-  e.preventDefault();
-  if (!validateForm()) return;
+    e.preventDefault();
+    if (!validateForm()) return;
 
-  setIsLoading(true);
-  setErrors({ email: "", password: "" });
+    setIsLoading(true);
+    setErrors({ email: "", password: "" });
 
-  try {
+    try {
       /**
        * IMPORTANT:
        * Use AuthContext.login() so it updates:
@@ -63,17 +63,17 @@ const LoginPage = () => {
 
       const redirectTo = fromPath || "/dashboard";
       navigate(redirectTo, { replace: true });
-  } catch (err: any) {
-    console.error("Login failed:", err.response?.data || err.message);
+    } catch (err: any) {
+      console.error("Login failed:", err.response?.data || err.message);
 
-    setErrors({
-      email: "",
+      setErrors({
+        email: "",
         password: err.response?.data?.message || err.message || "Invalid email or password",
-    });
-  } finally {
-    setIsLoading(false);
-  }
-};
+      });
+    } finally {
+      setIsLoading(false);
+    }
+  };
   return (
     <div className="relative bg-background">
       <div className="w-[120vw] absolute top-[-30vh] left-[-5vw] h-[40vh] bg-gradient-to-r from-primary/80 to-secondary/80 rotate-[-6deg] custom-shadow"></div>

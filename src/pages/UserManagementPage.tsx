@@ -9,42 +9,38 @@ import Button from "../components/ui/Button";
 import {
     Search,
     UserPlus,
-    UserX,
-    CheckCircle2,
     Eye,
     ShieldCheck,
     Shield
 } from "lucide-react";
 import { useNavigate } from "react-router-dom";
-import ConfirmationModal from "../components/ui/ConfirmationModal";
 
 const UserManagementPage = () => {
     const navigate = useNavigate();
     const reduceMotion = useReducedMotion();
     const [searchQuery, setSearchQuery] = useState("");
     const [roleFilter, setRoleFilter] = useState("all");
-    const [statusFilter, setStatusFilter] = useState("all");
+    const [currentPage, setCurrentPage] = useState(1);
+    const [totalPages, setTotalPages] = useState(1);
+    const [totalUsers, setTotalUsers] = useState(0);
 
-    // Modal states
-    const [actionModal, setActionModal] = useState<{
-        isOpen: boolean;
-        userId: string | null;
-        action: 'suspend' | 'activate' | null;
-    }>({
-        isOpen: false,
-        userId: null,
-        action: null
-    });
+
 
     // Mock User Data
     const [users, setUsers] = useState<any[]>([]);
-    const [loading, setLoading] = useState(true);
+
 
     const fetchUsers = async () => {
         try {
-            setLoading(true);
             const token = localStorage.getItem("token");
-            const response = await fetch(`${API_BASE_URL}/api/admin/users`, {
+            const queryParams = new URLSearchParams({
+                page: currentPage.toString(),
+                limit: "10",
+                search: searchQuery,
+                role: roleFilter !== 'all' ? roleFilter : '',
+            });
+
+            const response = await fetch(`${API_BASE_URL}/api/admin/users?${queryParams}`, {
                 headers: {
                     Authorization: `Bearer ${token}`,
                 },
@@ -52,70 +48,41 @@ const UserManagementPage = () => {
 
             if (response.ok) {
                 const data = await response.json();
-                setUsers(data.users || data || []);
+                console.log("Admin Users API Data:", data); // DEBUG: Inspect API response
+                const normalizedUsers = (data.users || []).map((u: any) => {
+                    return {
+                        ...u,
+                        id: u.id || u._id
+                    };
+                });
+
+                // Sort by ID or creation date if available (newest first)
+                normalizedUsers.sort((a: any, b: any) => {
+                    const dateA = new Date(a.createdAt || 0).getTime();
+                    const dateB = new Date(b.createdAt || 0).getTime();
+                    return dateB - dateA;
+                });
+
+                setUsers(normalizedUsers);
+                setTotalPages(data.totalPages || 1);
+                setTotalUsers(data.totalUsers || normalizedUsers.length);
             }
         } catch (err) {
             console.error("Failed to fetch users:", err);
-        } finally {
-            setLoading(false);
         }
     };
 
     useEffect(() => {
         fetchUsers();
-    }, []);
+    }, [currentPage, searchQuery, roleFilter]);
 
     const filteredUsers = useMemo(() => {
         return users.filter(user => {
-            const name = user.name || "";
-            const email = user.email || "";
-            const matchesSearch = name.toLowerCase().includes(searchQuery.toLowerCase()) ||
-                email.toLowerCase().includes(searchQuery.toLowerCase());
-            const matchesRole = roleFilter === "all" || user.role === roleFilter;
-            const matchesStatus = statusFilter === "all" || user.status === statusFilter;
-            return matchesSearch && matchesRole && matchesStatus;
+            if (roleFilter === "all") return true;
+            return user.role?.toLowerCase() === roleFilter.toLowerCase();
         });
-    }, [users, searchQuery, roleFilter, statusFilter]);
+    }, [users, roleFilter]);
 
-    const handleAction = (userId: string, action: 'suspend' | 'activate') => {
-        setActionModal({
-            isOpen: true,
-            userId,
-            action
-        });
-    };
-
-    const confirmAction = async () => {
-        if (!actionModal.userId || !actionModal.action) return;
-
-        try {
-            const token = localStorage.getItem("token");
-            const newStatus = actionModal.action === 'suspend' ? 'suspended' : 'active';
-
-            const response = await fetch(`${API_BASE_URL}/api/admin/users/${actionModal.userId}/status`, {
-                method: 'PATCH',
-                headers: {
-                    'Content-Type': 'application/json',
-                    Authorization: `Bearer ${token}`,
-                },
-                body: JSON.stringify({ status: newStatus }),
-            });
-
-            if (response.ok) {
-                setUsers(prev => prev.map(u => {
-                    const id = u.id || u._id;
-                    if (id === actionModal.userId) {
-                        return { ...u, status: newStatus };
-                    }
-                    return u;
-                }));
-            }
-        } catch (err) {
-            console.error("Failed to update user status:", err);
-        } finally {
-            setActionModal({ isOpen: false, userId: null, action: null });
-        }
-    };
 
     return (
         <AdminLayout>
@@ -123,11 +90,6 @@ const UserManagementPage = () => {
                 <ContentHeader
                     title="User Management"
                     description="Manage MockMate users, roles, and account statuses"
-                    sideButtons={
-                        <Button icons={<UserPlus className="w-4 h-4" />} iconsPosition="left">
-                            Add Admin
-                        </Button>
-                    }
                 />
 
                 {/* Filters Bar */}
@@ -138,28 +100,25 @@ const UserManagementPage = () => {
                             type="text"
                             placeholder="Search users by name or email..."
                             value={searchQuery}
-                            onChange={(e) => setSearchQuery(e.target.value)}
+                            onChange={(e) => {
+                                setSearchQuery(e.target.value);
+                                setCurrentPage(1);
+                            }}
                             className="w-full pl-10 pr-4 py-2 bg-card border border-border rounded-xl focus:outline-none focus:ring-2 focus:ring-primary/35 text-sm"
                         />
                     </div>
                     <div className="flex gap-2">
                         <select
                             value={roleFilter}
-                            onChange={(e) => setRoleFilter(e.target.value)}
+                            onChange={(e) => {
+                                setRoleFilter(e.target.value);
+                                setCurrentPage(1);
+                            }}
                             className="px-4 py-2 bg-card border border-border rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-primary/35"
                         >
                             <option value="all">All Roles</option>
                             <option value="user">Users</option>
                             <option value="admin">Admins</option>
-                        </select>
-                        <select
-                            value={statusFilter}
-                            onChange={(e) => setStatusFilter(e.target.value)}
-                            className="px-4 py-2 bg-card border border-border rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-primary/35"
-                        >
-                            <option value="all">All Status</option>
-                            <option value="active">Active</option>
-                            <option value="suspended">Suspended</option>
                         </select>
                     </div>
                 </div>
@@ -171,17 +130,16 @@ const UserManagementPage = () => {
                             <table className="w-full text-left border-collapse">
                                 <thead>
                                     <tr className="bg-primary/5 border-b border-border">
-                                        <th className="px-6 py-4 text-xs font-semibold uppercase tracking-wider text-text-secondary">Name / Email</th>
-                                        <th className="px-6 py-4 text-xs font-semibold uppercase tracking-wider text-text-secondary">Role</th>
-                                        <th className="px-6 py-4 text-xs font-semibold uppercase tracking-wider text-text-secondary">Status</th>
-                                        <th className="px-6 py-4 text-xs font-semibold uppercase tracking-wider text-text-secondary text-center">Interviews</th>
-                                        <th className="px-6 py-4 text-xs font-semibold uppercase tracking-wider text-text-secondary text-right">Actions</th>
+                                        <th className="px-4 sm:px-6 py-4 text-xs font-semibold uppercase tracking-wider text-text-secondary text-left">User Details</th>
+                                        <th className="hidden sm:table-cell px-6 py-4 text-xs font-semibold uppercase tracking-wider text-text-secondary text-center">Role</th>
+                                        <th className="hidden md:table-cell px-6 py-4 text-xs font-semibold uppercase tracking-wider text-text-secondary text-center">Interviews</th>
+                                        <th className="px-4 sm:px-6 py-4 text-xs font-semibold uppercase tracking-wider text-text-secondary text-center">Actions</th>
                                     </tr>
                                 </thead>
                                 <tbody className="divide-y divide-border">
                                     {filteredUsers.length === 0 ? (
                                         <tr>
-                                            <td colSpan={5} className="px-6 py-12 text-center text-text-secondary italic">
+                                            <td colSpan={4} className="px-6 py-12 text-center text-text-secondary italic">
                                                 No users found matching your criteria.
                                             </td>
                                         </tr>
@@ -194,61 +152,44 @@ const UserManagementPage = () => {
                                                 transition={{ delay: idx * 0.05 }}
                                                 className="hover:bg-primary/5 transition-colors group"
                                             >
-                                                <td className="px-6 py-4">
+                                                <td className="px-4 sm:px-6 py-4">
                                                     <div className="flex flex-col">
-                                                        <span className="font-medium text-text-primary">{user.name}</span>
-                                                        <span className="text-xs text-text-secondary">{user.email}</span>
+                                                        <span className="font-medium text-text-primary text-sm sm:text-base">{user.name}</span>
+                                                        <span className="text-[10px] sm:text-xs text-text-secondary break-all max-w-[120px] sm:max-w-none">{user.email}</span>
+                                                        {/* Mobile Role Badge */}
+                                                        <div className="sm:hidden mt-1">
+                                                            <span className={`text-[9px] font-bold uppercase ${user.role === 'admin' ? 'text-purple-400' : 'text-blue-400'}`}>
+                                                                {user.role}
+                                                            </span>
+                                                        </div>
                                                     </div>
                                                 </td>
-                                                <td className="px-6 py-4">
-                                                    <div className={`inline-flex items-center gap-1 px-2 py-1 rounded text-[11px] font-bold uppercase tracking-wider ${user.role === 'admin' ? 'bg-purple-500/10 text-purple-400 border border-purple-500/20' : 'bg-blue-500/10 text-blue-400 border border-blue-500/20'
+                                                <td className="hidden sm:table-cell px-6 py-4 text-center">
+                                                    <div className={`inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-[10px] font-bold uppercase tracking-wider ${user.role === 'admin' ? 'bg-purple-500/10 text-purple-400 border border-purple-500/20' : 'bg-primary/10 text-primary border border-primary/20'
                                                         }`}>
-                                                        {user.role === 'admin' ? <ShieldCheck className="w-3 h-3" /> : <Shield className="w-3 h-3" />}
-                                                        {user.role}
+                                                        {user.role === 'admin' ? <ShieldCheck className="w-3.5 h-3.5" /> : <Shield className="w-3.5 h-3.5" />}
+                                                        {user.role || 'user'}
                                                     </div>
                                                 </td>
-                                                <td className="px-6 py-4">
-                                                    <div className={`inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-xs font-medium ${user.status === 'active' ? 'text-green-400 bg-green-500/10' : 'text-red-400 bg-red-500/10'
-                                                        }`}>
-                                                        <div className={`w-1.5 h-1.5 rounded-full ${user.status === 'active' ? 'bg-green-500' : 'bg-red-500'}`} />
-                                                        {user.status}
-                                                    </div>
+                                                <td className="hidden md:table-cell px-6 py-4 text-center">
+                                                    <span className="text-sm text-text-primary font-medium">
+                                                        {user.stats?.totalInterviews ??
+                                                            user.totalInterviews ??
+                                                            user.interviewsCount ??
+                                                            (Array.isArray(user.interviews) ? user.interviews.length : (user.interviews || 0))}
+                                                    </span>
                                                 </td>
-                                                <td className="px-6 py-4 text-center">
-                                                    <span className="text-sm text-text-primary font-medium">{user.interviews}</span>
-                                                </td>
-                                                <td className="px-6 py-4 text-right">
-                                                    <div className="flex justify-end gap-2 opacity-0 group-hover:opacity-100 transition-opacity">
+                                                <td className="px-4 sm:px-6 py-4">
+                                                    <div className="flex justify-center gap-1 sm:gap-2">
                                                         <Button
                                                             variant="ghost"
                                                             size="sm"
-                                                            className="w-8 h-8 p-0"
+                                                            className="w-7 h-7 sm:w-8 sm:h-8 p-0"
                                                             onClick={() => navigate(`/admin/users/${user.id}`)}
                                                             title="View Profile"
                                                         >
                                                             <Eye className="w-4 h-4" />
                                                         </Button>
-                                                        {user.status === 'active' ? (
-                                                            <Button
-                                                                variant="ghost"
-                                                                size="sm"
-                                                                className="w-8 h-8 p-0 text-red-500 hover:text-red-400 hover:bg-red-500/10"
-                                                                onClick={() => handleAction(user.id, 'suspend')}
-                                                                title="Suspend Account"
-                                                            >
-                                                                <UserX className="w-4 h-4" />
-                                                            </Button>
-                                                        ) : (
-                                                            <Button
-                                                                variant="ghost"
-                                                                size="sm"
-                                                                className="w-8 h-8 p-0 text-green-500 hover:text-green-400 hover:bg-green-500/10"
-                                                                onClick={() => handleAction(user.id, 'activate')}
-                                                                title="Activate Account"
-                                                            >
-                                                                <CheckCircle2 className="w-4 h-4" />
-                                                            </Button>
-                                                        )}
                                                     </div>
                                                 </td>
                                             </motion.tr>
@@ -260,17 +201,49 @@ const UserManagementPage = () => {
                     </CardContent>
                 </Card>
 
-                {/* Confirmation Modal */}
-                <ConfirmationModal
-                    isOpen={actionModal.isOpen}
-                    onClose={() => setActionModal({ isOpen: false, userId: null, action: null })}
-                    onConfirm={confirmAction}
-                    title={actionModal.action === 'suspend' ? "Suspend User Account" : "Activate User Account"}
-                    message={`Are you sure you want to ${actionModal.action} this user? ${actionModal.action === 'suspend' ? "They will no longer be able to log in or start interviews." : "They will regain access to their account."}`}
-                    confirmText={actionModal.action === 'suspend' ? "Suspend" : "Activate"}
-                    cancelText="Cancel"
-                    confirmColor={actionModal.action === 'suspend' ? 'rgb(var(--error))' : 'rgb(var(--primary))'}
-                />
+                {/* Pagination Controls */}
+                {totalPages > 1 && (
+                    <div className="flex flex-col sm:flex-row items-center justify-between gap-4 mt-6 px-2">
+                        <p className="text-sm text-text-secondary order-2 sm:order-1">
+                            Showing <span className="font-semibold text-text-primary">{users.length}</span> of <span className="font-semibold text-text-primary">{totalUsers}</span> users
+                        </p>
+                        <div className="flex items-center gap-2 order-1 sm:order-2">
+                            <Button
+                                variant="ghost"
+                                size="sm"
+                                onClick={() => setCurrentPage(prev => Math.max(1, prev - 1))}
+                                disabled={currentPage === 1}
+                                className="px-3"
+                            >
+                                Previous
+                            </Button>
+                            <div className="flex items-center gap-1">
+                                {Array.from({ length: totalPages }, (_, i) => i + 1).map(page => (
+                                    <button
+                                        key={page}
+                                        onClick={() => setCurrentPage(page)}
+                                        className={`w-8 h-8 rounded-lg text-xs font-medium transition-all ${currentPage === page
+                                            ? "bg-primary text-white shadow-lg shadow-primary/25"
+                                            : "text-text-secondary hover:bg-primary/10 hover:text-primary"
+                                            }`}
+                                    >
+                                        {page}
+                                    </button>
+                                ))}
+                            </div>
+                            <Button
+                                variant="ghost"
+                                size="sm"
+                                onClick={() => setCurrentPage(prev => Math.min(totalPages, prev + 1))}
+                                disabled={currentPage === totalPages}
+                                className="px-3"
+                            >
+                                Next
+                            </Button>
+                        </div>
+                    </div>
+                )}
+
             </AnimatedPage>
         </AdminLayout>
     );

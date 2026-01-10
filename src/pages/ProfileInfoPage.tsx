@@ -1,24 +1,54 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import AppLayout from '../components/layout/AppLayout';
-import { Card, CardContent, CardHeader, CardTitle } from '../components/ui/Card';
+import { Card, CardContent } from '../components/ui/Card';
 import Input from '../components/ui/Input';
 import Button from '../components/ui/Button';
 import { useAuth } from '../contexts/AuthContext';
+import { API_BASE_URL } from '../config/api';
 
 const ProfileInfoPage = () => {
   const navigate = useNavigate();
-  const { user } = useAuth();
-  
+  const { } = useAuth();
+
+  const [loading, setLoading] = useState(true);
   const [formData, setFormData] = useState({
-    fullName: user?.name || '',
+    fullName: '',
     username: '',
-    email: user?.email || '',
+    email: '',
     phoneNumber: '',
     location: '',
     bio: ''
   });
-  
+
+  useEffect(() => {
+    const fetchProfile = async () => {
+      try {
+        const token = localStorage.getItem("token");
+        const response = await fetch(`${API_BASE_URL}/api/profile`, {
+          headers: { Authorization: `Bearer ${token}` }
+        });
+        if (response.ok) {
+          const data = await response.json();
+          const p = data.user || data;
+          setFormData({
+            fullName: p.name || '',
+            username: p.username || '',
+            email: p.email || '',
+            phoneNumber: p.phoneNumber || '',
+            location: p.location || '',
+            bio: p.bio || ''
+          });
+        }
+      } catch (err) {
+        console.error("Failed to fetch profile:", err);
+      } finally {
+        setLoading(false);
+      }
+    };
+    fetchProfile();
+  }, []);
+
   const handleChange = (e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement>) => {
     const { name, value } = e.target;
     setFormData((prev) => ({
@@ -26,20 +56,49 @@ const ProfileInfoPage = () => {
       [name]: value
     }));
   };
-  
-  const handleSubmit = (e: React.FormEvent) => {
+
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    // In a real app, this would update the user's profile
-    // For now, we'll just navigate back to settings
-    navigate('/profile-settings');
+    try {
+      const token = localStorage.getItem("token");
+      const response = await fetch(`${API_BASE_URL}/api/profile`, {
+        method: 'PATCH',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${token}`
+        },
+        body: JSON.stringify({
+          name: formData.fullName,
+          username: formData.username,
+          phoneNumber: formData.phoneNumber,
+          location: formData.location,
+          bio: formData.bio
+        })
+      });
+      if (response.ok) {
+        navigate('/profile-settings');
+      }
+    } catch (err) {
+      console.error("Failed to update profile:", err);
+    }
   };
-  
+
+  if (loading) {
+    return (
+      <AppLayout>
+        <div className="flex items-center justify-center h-screen">
+          <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-primary"></div>
+        </div>
+      </AppLayout>
+    );
+  }
+
   return (
     <AppLayout>
       <div className="p-6 md:p-8 max-w-4xl">
         <div className="mb-6">
-          <button 
-            onClick={() => navigate('/profile-settings')} 
+          <button
+            onClick={() => navigate('/profile-settings')}
             className="flex items-center text-primary hover:text-primary/80 transition-colors"
           >
             <svg className="w-5 h-5 mr-1" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -48,14 +107,14 @@ const ProfileInfoPage = () => {
             Back
           </button>
         </div>
-        
+
         <div className="flex flex-col md:flex-row md:items-center justify-between mb-8">
           <div>
             <h1 className="text-2xl font-bold mb-2">Profile Information</h1>
             <p className="text-gray-400">Update your personal details</p>
           </div>
         </div>
-        
+
         <Card>
           <CardContent className="pt-6">
             <form onSubmit={handleSubmit} className="space-y-6">
@@ -78,7 +137,7 @@ const ProfileInfoPage = () => {
                   />
                 </div>
               </div>
-              
+
               <div className="flex flex-col md:flex-row gap-6">
                 <div className="flex-1">
                   <Input
@@ -100,7 +159,7 @@ const ProfileInfoPage = () => {
                   />
                 </div>
               </div>
-              
+
               <div>
                 <Input
                   label="Location"
@@ -110,7 +169,7 @@ const ProfileInfoPage = () => {
                   placeholder="City, Country"
                 />
               </div>
-              
+
               <div>
                 <label className="block text-sm font-medium text-text-secondary mb-1.5">
                   Bio
@@ -124,7 +183,7 @@ const ProfileInfoPage = () => {
                   placeholder="Tell us a bit about yourself..."
                 ></textarea>
               </div>
-              
+
               <div className="flex justify-end gap-4">
                 <Button
                   type="button"

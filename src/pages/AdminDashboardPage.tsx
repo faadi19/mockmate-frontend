@@ -1,5 +1,5 @@
 import { useState, useMemo, useEffect } from "react";
-import { motion, useReducedMotion } from "framer-motion";
+import { motion } from "framer-motion";
 import AdminLayout from "../components/layout/AdminLayout";
 import { API_BASE_URL } from "../config/api";
 import {
@@ -11,6 +11,7 @@ import {
 import ContentHeader from "../components/layout/ContentHeader";
 import AnimatedPage from "../components/ui/AnimatedPage";
 import { Bar, Line, Doughnut } from "react-chartjs-2";
+import { useNavigate } from "react-router-dom";
 import {
     Chart as ChartJS,
     CategoryScale,
@@ -38,7 +39,7 @@ ChartJS.register(
 );
 
 const AdminDashboardPage = () => {
-    const reduceMotion = useReducedMotion();
+    const navigate = useNavigate();
     const [loading, setLoading] = useState(true);
 
 
@@ -98,97 +99,99 @@ const AdminDashboardPage = () => {
                     console.error("Summary fetch error:", e);
                 }
 
-                // 2. Fetch Interviews (For Charts Only)
-                try {
-                    const interviewsRes = await fetch(`${API_BASE_URL}/api/admin/interviews`, {
-                        headers: { Authorization: `Bearer ${token}` }
+                // 2. Fetch Interviews & Violations
+                const [interviewsRes, violationsRes] = await Promise.all([
+                    fetch(`${API_BASE_URL}/api/admin/interviews`, { headers: { Authorization: `Bearer ${token}` } }).catch(() => null),
+                    fetch(`${API_BASE_URL}/api/admin/violations`, { headers: { Authorization: `Bearer ${token}` } }).catch(() => null)
+                ]);
+
+                let interviews: any[] = [];
+                let violations: any[] = [];
+
+                if (interviewsRes?.ok) {
+                    const data = await interviewsRes.json();
+                    interviews = data.interviews || (Array.isArray(data) ? data : []);
+                }
+
+                if (violationsRes?.ok) {
+                    const data = await violationsRes.json();
+                    violations = data.violations || (Array.isArray(data) ? data : []);
+                }
+
+                if (isMounted) {
+                    // Process Interviews
+                    const last7Days = Array.from({ length: 7 }, (_, i) => {
+                        const d = new Date();
+                        d.setDate(d.getDate() - (6 - i));
+                        return d.toLocaleDateString();
                     });
 
-                    if (interviewsRes.ok && isMounted) {
-                        const data = await interviewsRes.json();
-                        const interviews = data.interviews || data || [];
+                    const dailyCounts = last7Days.map(date =>
+                        interviews.filter((i: any) => new Date(i.createdAt).toLocaleDateString() === date).length
+                    );
 
-                        // ... (Chart Data Processing) ...
-                        // 1. Process Interviews Per Day (Last 7 Days)
-                        const last7Days = Array.from({ length: 7 }, (_, i) => {
-                            const d = new Date();
-                            d.setDate(d.getDate() - (6 - i));
-                            return d.toLocaleDateString();
-                        });
+                    const roles: Record<string, number> = {};
+                    interviews.forEach((i: any) => {
+                        const r = i.role || i.setup?.role || "Unknown";
+                        roles[r] = (roles[r] || 0) + 1;
+                    });
 
-                        const dailyCounts = last7Days.map(date =>
-                            interviews.filter((i: any) => new Date(i.createdAt).toLocaleDateString() === date).length
-                        );
+                    // Process Violations
+                    const violationCounts = { "Camera Off": 0, "Face Mismatch": 0, "Multiple Faces": 0, "Phone Detected": 0 };
 
-                        // 2. Process Role Distribution
-                        const roles: Record<string, number> = {};
-                        interviews.forEach((i: any) => {
-                            const r = i.role || i.setup?.role || "Unknown";
-                            roles[r] = (roles[r] || 0) + 1;
-                        });
+                    const sortedViolations = [...violations].sort((a, b) =>
+                        new Date(b.timestamp || 0).getTime() - new Date(a.timestamp || 0).getTime()
+                    );
 
-                        // 3. Process Violations
-                        const violationCounts = { "Camera Off": 0, "Face Mismatch": 0, "Multiple Faces": 0, "Phone Detected": 0 };
-                        const recent: any[] = [];
+                    violations.forEach((v: any) => {
+                        const vType = v.type || v.violationType || "Other";
+                        const type = vType.toUpperCase();
 
-                        interviews.forEach((i: any) => {
-                            if (i.violations) {
-                                i.violations.forEach((v: any) => {
-                                    const type = (v.type || "Other").toUpperCase();
-                                    if (type.includes("CAMERA")) violationCounts["Camera Off"]++;
-                                    else if (type.includes("FACE") || type.includes("IDENTITY")) violationCounts["Face Mismatch"]++;
-                                    else if (type.includes("MULTIPLE")) violationCounts["Multiple Faces"]++;
-                                    else if (type.includes("PHONE")) violationCounts["Phone Detected"]++;
+                        if (type.includes("CAMERA")) violationCounts["Camera Off"]++;
+                        else if (type.includes("FACE") || type.includes("IDENTITY")) violationCounts["Face Mismatch"]++;
+                        else if (type.includes("MULTIPLE")) violationCounts["Multiple Faces"]++;
+                        else if (type.includes("PHONE")) violationCounts["Phone Detected"]++;
+                    });
 
-                                    // Add to recent list
-                                    recent.push({
-                                        id: v._id || Math.random(),
-                                        type: type,
-                                        user: i.userName || "Unknown",
-                                        userId: i.userId,
-                                        time: v.timestamp ? new Date(v.timestamp).toLocaleString() : "Recent"
-                                    });
-                                });
-                            }
-                        });
+                    const recent = sortedViolations.slice(0, 5).map((v: any) => ({
+                        id: v._id || Math.random(),
+                        type: v.type || v.violationType || "Violation",
+                        user: v.userId?.name || (v.user ? (typeof v.user === 'string' ? v.user : v.user.name) : "Unknown"),
+                        userId: v.userId?._id || v.userId,
+                        time: v.timestamp ? new Date(v.timestamp).toLocaleString() : "Recent"
+                    }));
 
-                        // Sort recent by time desc
-                        recent.sort((a, b) => new Date(b.time).getTime() - new Date(a.time).getTime());
-
-                        setChartData({
-                            interviewsPerDay: {
-                                labels: last7Days.map(d => d.split('/')[1] + '/' + d.split('/')[2]),
-                                datasets: [{
-                                    label: "Interviews",
-                                    data: dailyCounts,
-                                    borderColor: chartColors.primary,
-                                    backgroundColor: chartColors.primaryLight,
-                                    fill: true,
-                                    tension: 0.4,
-                                }]
-                            },
-                            roleWise: {
-                                labels: Object.keys(roles),
-                                datasets: [{
-                                    label: "Interviews",
-                                    data: Object.values(roles),
-                                    backgroundColor: chartColors.primary,
-                                    borderRadius: 6,
-                                }]
-                            },
-                            violations: {
-                                labels: Object.keys(violationCounts),
-                                datasets: [{
-                                    data: Object.values(violationCounts),
-                                    backgroundColor: [chartColors.warning, chartColors.danger, chartColors.info, chartColors.secondary],
-                                    borderWidth: 0,
-                                }]
-                            },
-                            recentViolations: recent.slice(0, 5) // Top 5
-                        });
-                    }
-                } catch (e) {
-                    console.error("Interviews fetch failed:", e);
+                    setChartData({
+                        interviewsPerDay: {
+                            labels: last7Days.map(d => d.split('/')[1] + '/' + d.split('/')[2]),
+                            datasets: [{
+                                label: "Interviews",
+                                data: dailyCounts,
+                                borderColor: chartColors.primary,
+                                backgroundColor: chartColors.primaryLight,
+                                fill: true,
+                                tension: 0.4,
+                            }]
+                        },
+                        roleWise: {
+                            labels: Object.keys(roles),
+                            datasets: [{
+                                label: "Interviews",
+                                data: Object.values(roles),
+                                backgroundColor: chartColors.primary,
+                                borderRadius: 6,
+                            }]
+                        },
+                        violations: {
+                            labels: Object.keys(violationCounts),
+                            datasets: [{
+                                data: Object.values(violationCounts),
+                                backgroundColor: [chartColors.warning, chartColors.danger, chartColors.info, chartColors.secondary],
+                                borderWidth: 0,
+                            }]
+                        },
+                        recentViolations: recent
+                    });
                 }
 
             } catch (err) {
@@ -353,7 +356,11 @@ const AdminDashboardPage = () => {
                                         <p className="text-sm text-text-secondary text-center py-4">No recent critical incidents.</p>
                                     ) : (
                                         chartData.recentViolations.map((v: any, i: number) => (
-                                            <div key={i} className="flex items-center gap-4 p-3 rounded-lg bg-red-500/5 border border-red-500/10 hover:bg-red-500/10 transition-colors cursor-pointer">
+                                            <div
+                                                key={i}
+                                                onClick={() => navigate('/admin/proctoring')}
+                                                className="flex items-center gap-4 p-3 rounded-lg bg-red-500/5 border border-red-500/10 hover:bg-red-500/10 transition-colors cursor-pointer"
+                                            >
                                                 <div className="w-10 h-10 rounded-full bg-red-500/20 flex items-center justify-center shrink-0">
                                                     <ShieldAlert className="w-5 h-5 text-red-500" />
                                                 </div>
@@ -364,7 +371,10 @@ const AdminDashboardPage = () => {
                                             </div>
                                         ))
                                     )}
-                                    <button className="w-full py-2 text-sm text-primary hover:text-primary-light transition-colors font-medium">
+                                    <button
+                                        onClick={() => navigate('/admin/proctoring')}
+                                        className="w-full py-2 text-sm text-primary hover:text-primary-light transition-colors font-medium"
+                                    >
                                         View All Incidents →
                                     </button>
                                 </div>

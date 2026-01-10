@@ -7,7 +7,6 @@ import { Card, CardContent } from "../components/ui/Card";
 import Button from "../components/ui/Button";
 import {
     Search,
-    Video,
     Eye,
     Calendar,
     User as UserIcon,
@@ -21,58 +20,63 @@ const InterviewManagementPage = () => {
     const navigate = useNavigate();
     const reduceMotion = useReducedMotion();
     const [searchQuery, setSearchQuery] = useState("");
-    const [statusFilter, setStatusFilter] = useState("all");
     const [interviews, setInterviews] = useState<any[]>([]);
     const [loading, setLoading] = useState(true);
 
-    useEffect(() => {
-        const fetchInterviews = async () => {
-            try {
-                const token = localStorage.getItem("token");
-                const response = await fetch(`${API_BASE_URL}/api/admin/interviews`, {
-                    headers: {
-                        Authorization: `Bearer ${token}`,
-                    },
-                });
+    // Pagination state
+    const [currentPage, setCurrentPage] = useState(1);
+    const [totalPages, setTotalPages] = useState(1);
+    const [totalInterviews, setTotalInterviews] = useState(0);
 
-                if (response.ok) {
-                    const data = await response.json();
+    const fetchInterviews = async () => {
+        setLoading(true);
+        try {
+            const token = localStorage.getItem("token");
+            const queryParams = new URLSearchParams({
+                page: currentPage.toString(),
+                limit: "10",
+                search: searchQuery,
+            });
 
-                    // Map backend data to UI format if needed
-                    const mapped = (data.interviews || data || []).map((int: any) => ({
-                        id: int.sessionId || int._id,
-                        userName: int.userName || int.userId?.name || int.user?.name || "Unknown",
-                        role: int.role || int.setup?.role || "N/A",
-                        date: int.date || new Date(int.createdAt).toLocaleDateString() || "Recent",
-                        status: int.status || (int.isTerminated ? "Terminated" : "Completed"),
-                        score: int.overallScore || int.score || 0,
-                        reason: int.terminationReason || int.reason || ""
-                    }));
+            const response = await fetch(`${API_BASE_URL}/api/admin/interviews?${queryParams}`, {
+                headers: {
+                    Authorization: `Bearer ${token}`,
+                },
+            });
 
-                    setInterviews(mapped);
-                }
-            } catch (err) {
-                console.error("Failed to fetch interviews:", err);
-            } finally {
-                setLoading(false);
+            if (response.ok) {
+                const data = await response.json();
+
+                const rawInterviews = data.interviews || data.data || data;
+                const mapped = (Array.isArray(rawInterviews) ? rawInterviews : []).map((int: any) => ({
+                    id: int.sessionId || int._id,
+                    userName: int.userName || int.userId?.name || int.user?.name || "Unknown",
+                    role: int.role || int.setup?.role || "N/A",
+                    date: int.date || (int.createdAt ? new Date(int.createdAt).toLocaleDateString() : "Recent"),
+                    status: int.status || (int.isTerminated ? "Terminated" : "Completed"),
+                    score: int.overallScore || int.score || 0,
+                    reason: int.terminationReason || int.reason || ""
+                }));
+
+                setInterviews(mapped);
+                setTotalPages(data.totalPages || 1);
+                setTotalInterviews(data.totalResults || data.totalInterviews || mapped.length);
             }
-        };
+        } catch (err) {
+            console.error("Failed to fetch interviews:", err);
+        } finally {
+            setLoading(true);
+            setLoading(false);
+        }
+    };
 
+    useEffect(() => {
         fetchInterviews();
-    }, []);
+    }, [currentPage, searchQuery]);
 
     const filteredInterviews = useMemo(() => {
-        return interviews.filter(interview => {
-            const userName = interview.userName || "";
-            const id = interview.id || "";
-            const role = interview.role || "";
-            const matchesSearch = userName.toLowerCase().includes(searchQuery.toLowerCase()) ||
-                id.toLowerCase().includes(searchQuery.toLowerCase()) ||
-                role.toLowerCase().includes(searchQuery.toLowerCase());
-            const matchesStatus = statusFilter === "all" || interview.status.toLowerCase() === statusFilter.toLowerCase();
-            return matchesSearch && matchesStatus;
-        });
-    }, [interviews, searchQuery, statusFilter]);
+        return interviews;
+    }, [interviews]);
 
     return (
         <AdminLayout>
@@ -94,15 +98,6 @@ const InterviewManagementPage = () => {
                             className="w-full pl-10 pr-4 py-2 bg-card border border-border rounded-xl focus:outline-none focus:ring-2 focus:ring-primary/35 text-sm"
                         />
                     </div>
-                    <select
-                        value={statusFilter}
-                        onChange={(e) => setStatusFilter(e.target.value)}
-                        className="px-4 py-2 bg-card border border-border rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-primary/35"
-                    >
-                        <option value="all">All Status</option>
-                        <option value="Completed">Completed</option>
-                        <option value="Terminated">Terminated</option>
-                    </select>
                 </div>
 
                 {/* Interviews Table */}
@@ -112,15 +107,24 @@ const InterviewManagementPage = () => {
                             <table className="w-full text-left border-collapse">
                                 <thead>
                                     <tr className="bg-primary/5 border-b border-border">
-                                        <th className="px-6 py-4 text-xs font-semibold uppercase tracking-wider text-text-secondary">Interview ID / Date</th>
-                                        <th className="px-6 py-4 text-xs font-semibold uppercase tracking-wider text-text-secondary">User</th>
-                                        <th className="px-6 py-4 text-xs font-semibold uppercase tracking-wider text-text-secondary text-center">Target Role</th>
-                                        <th className="px-6 py-4 text-xs font-semibold uppercase tracking-wider text-text-secondary text-center">Status</th>
-                                        <th className="px-6 py-4 text-xs font-semibold uppercase tracking-wider text-text-secondary text-center">Actions</th>
+                                        <th className="px-4 sm:px-6 py-4 text-xs font-semibold uppercase tracking-wider text-text-secondary text-left">Interview / Date</th>
+                                        <th className="px-4 sm:px-6 py-4 text-xs font-semibold uppercase tracking-wider text-text-secondary text-left">User</th>
+                                        <th className="hidden sm:table-cell px-6 py-4 text-xs font-semibold uppercase tracking-wider text-text-secondary text-center">Role</th>
+                                        <th className="px-4 sm:px-6 py-4 text-xs font-semibold uppercase tracking-wider text-text-secondary text-center">Status</th>
+                                        <th className="px-4 sm:px-6 py-4 text-xs font-semibold uppercase tracking-wider text-text-secondary text-center">Actions</th>
                                     </tr>
                                 </thead>
                                 <tbody className="divide-y divide-border">
-                                    {filteredInterviews.length === 0 ? (
+                                    {loading ? (
+                                        <tr>
+                                            <td colSpan={5} className="px-6 py-12 text-center">
+                                                <div className="flex flex-col items-center gap-3">
+                                                    <div className="w-8 h-8 border-2 border-primary/20 border-t-primary rounded-full animate-spin" />
+                                                    <p className="text-sm text-text-secondary">Loading interviews...</p>
+                                                </div>
+                                            </td>
+                                        </tr>
+                                    ) : filteredInterviews.length === 0 ? (
                                         <tr>
                                             <td colSpan={5} className="px-6 py-12 text-center text-text-secondary italic">
                                                 No interviews found.
@@ -135,46 +139,49 @@ const InterviewManagementPage = () => {
                                                 transition={{ delay: idx * 0.05 }}
                                                 className="hover:bg-primary/5 transition-colors group"
                                             >
-                                                <td className="px-6 py-4">
+                                                <td className="px-4 sm:px-6 py-4">
                                                     <div className="flex flex-col">
-                                                        <span className="font-medium text-text-primary">#{interview.id}</span>
-                                                        <div className="flex items-center gap-1.5 text-[11px] text-text-secondary mt-0.5">
+                                                        <span className="font-medium text-text-primary text-[10px] sm:text-xs break-all">#{interview.id}</span>
+                                                        <div className="flex items-center gap-1.5 text-[10px] sm:text-[11px] text-text-secondary mt-0.5 whitespace-nowrap">
                                                             <Calendar className="w-3 h-3" /> {interview.date}
                                                         </div>
                                                     </div>
                                                 </td>
-                                                <td className="px-6 py-4">
+                                                <td className="px-4 sm:px-6 py-4">
                                                     <div className="flex items-center gap-2">
-                                                        <div className="w-8 h-8 rounded-full bg-primary/10 flex items-center justify-center">
-                                                            <UserIcon className="w-4 h-4 text-primary" />
+                                                        <div className="hidden xs:flex w-7 h-7 sm:w-8 sm:h-8 rounded-full bg-primary/10 items-center justify-center shrink-0">
+                                                            <UserIcon className="w-3.5 h-3.5 sm:w-4 sm:h-4 text-primary" />
                                                         </div>
-                                                        <span className="text-sm font-medium text-text-primary">{interview.userName}</span>
+                                                        <div className="flex flex-col">
+                                                            <span className="text-xs sm:text-sm font-medium text-text-primary truncate max-w-[80px] sm:max-w-none">{interview.userName}</span>
+                                                            <span className="sm:hidden text-[9px] text-text-secondary truncate">{interview.role}</span>
+                                                        </div>
                                                     </div>
                                                 </td>
-                                                <td className="px-6 py-4 text-center">
+                                                <td className="hidden sm:table-cell px-6 py-4 text-center">
                                                     <span className="text-sm text-text-secondary">{interview.role}</span>
                                                 </td>
-                                                <td className="px-6 py-4 text-center">
-                                                    <div className={`inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-xs font-medium ${interview.status === 'Completed' ? 'text-green-400 bg-green-500/10' : 'text-red-400 bg-red-500/10'
+                                                <td className="px-4 sm:px-6 py-4 text-center">
+                                                    <div className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] sm:text-xs font-medium ${interview.status === 'Completed' ? 'text-green-400 bg-green-500/10' : 'text-red-400 bg-red-500/10'
                                                         }`}>
-                                                        {interview.status === 'Completed' ? <CheckCircle2 className="w-3.5 h-3.5" /> : <XCircle className="w-3.5 h-3.5" />}
-                                                        {interview.status}
+                                                        <span className="hidden sm:inline-flex items-center gap-1.5">
+                                                            {interview.status === 'Completed' ? <CheckCircle2 className="w-3.5 h-3.5" /> : <XCircle className="w-3.5 h-3.5" />}
+                                                            {interview.status}
+                                                        </span>
+                                                        <span className="sm:hidden">{interview.status === 'Completed' ? 'Done' : 'Term'}</span>
                                                     </div>
-                                                    {interview.reason && (
-                                                        <p className="text-[10px] text-red-500/70 mt-1 ml-5 italic">{interview.reason}</p>
-                                                    )}
                                                 </td>
-                                                <td className="px-6 py-4 text-center">
+                                                <td className="px-4 sm:px-6 py-4 text-center">
                                                     <div className="flex justify-center">
                                                         <Button
                                                             variant="ghost"
                                                             size="sm"
-                                                            className="bg-primary/5 hover:bg-primary/10 border border-primary/10 hover:border-primary/20"
+                                                            className="h-7 sm:h-8 px-2 sm:px-3 text-[10px] sm:text-xs bg-primary/5 hover:bg-primary/10 border border-primary/10 hover:border-primary/20"
                                                             onClick={() => navigate(`/admin/interviews/${interview.id}`)}
-                                                            icons={<Eye className="w-4 h-4" />}
+                                                            icons={<Eye className="w-3.5 h-3.5 sm:w-4 sm:h-4" />}
                                                             iconsPosition="left"
                                                         >
-                                                            Review
+                                                            <span className="hidden xs:inline">Review</span>
                                                         </Button>
                                                     </div>
                                                 </td>
@@ -186,8 +193,61 @@ const InterviewManagementPage = () => {
                         </div>
                     </CardContent>
                 </Card>
+
+                {/* Pagination Controls */}
+                {totalPages > 1 && (
+                    <div className="flex flex-col sm:flex-row items-center justify-between gap-4 mt-6 px-2">
+                        <p className="text-sm text-text-secondary order-2 sm:order-1">
+                            Showing <span className="font-semibold text-text-primary">{interviews.length}</span> of <span className="font-semibold text-text-primary">{totalInterviews}</span> interviews
+                        </p>
+                        <div className="flex items-center gap-2 order-1 sm:order-2">
+                            <Button
+                                variant="ghost"
+                                size="sm"
+                                onClick={() => setCurrentPage(prev => Math.max(1, prev - 1))}
+                                disabled={currentPage === 1}
+                                className="px-3"
+                            >
+                                Previous
+                            </Button>
+                            <div className="flex items-center gap-1">
+                                {Array.from({ length: Math.min(5, totalPages) }, (_, i) => {
+                                    // Simple pagination window logic
+                                    let pageNum = i + 1;
+                                    if (totalPages > 5 && currentPage > 3) {
+                                        pageNum = currentPage - 3 + i + 1;
+                                        if (pageNum > totalPages) pageNum = totalPages - (4 - i);
+                                    }
+                                    if (pageNum <= 0) return null;
+
+                                    return (
+                                        <button
+                                            key={pageNum}
+                                            onClick={() => setCurrentPage(pageNum)}
+                                            className={`w-8 h-8 rounded-lg text-xs font-medium transition-all ${currentPage === pageNum
+                                                ? "bg-primary text-white shadow-lg shadow-primary/25"
+                                                : "text-text-secondary hover:bg-primary/10 hover:text-primary"
+                                                }`}
+                                        >
+                                            {pageNum}
+                                        </button>
+                                    );
+                                })}
+                            </div>
+                            <Button
+                                variant="ghost"
+                                size="sm"
+                                onClick={() => setCurrentPage(prev => Math.min(totalPages, prev + 1))}
+                                disabled={currentPage === totalPages}
+                                className="px-3"
+                            >
+                                Next
+                            </Button>
+                        </div>
+                    </div>
+                )}
             </AnimatedPage>
-        </AdminLayout>
+        </AdminLayout >
     );
 };
 
