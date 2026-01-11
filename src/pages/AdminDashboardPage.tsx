@@ -99,10 +99,10 @@ const AdminDashboardPage = () => {
                     console.error("Summary fetch error:", e);
                 }
 
-                // 2. Fetch Interviews & Violations
+                // 2. Fetch Interviews & Violations (Higher limit for charts)
                 const [interviewsRes, violationsRes] = await Promise.all([
-                    fetch(`${API_BASE_URL}/api/admin/interviews`, { headers: { Authorization: `Bearer ${token}` } }).catch(() => null),
-                    fetch(`${API_BASE_URL}/api/admin/violations`, { headers: { Authorization: `Bearer ${token}` } }).catch(() => null)
+                    fetch(`${API_BASE_URL}/api/admin/interviews?limit=1000`, { headers: { Authorization: `Bearer ${token}` } }).catch(() => null),
+                    fetch(`${API_BASE_URL}/api/admin/violations?limit=1000`, { headers: { Authorization: `Bearer ${token}` } }).catch(() => null)
                 ]);
 
                 let interviews: any[] = [];
@@ -135,6 +135,11 @@ const AdminDashboardPage = () => {
                         const r = i.role || i.setup?.role || "Unknown";
                         roles[r] = (roles[r] || 0) + 1;
                     });
+
+                    const topRoles = Object.entries(roles)
+                        .filter(([role, count]) => count > 0 && role !== "Unknown" && role !== "N/A" && role !== "")
+                        .sort((a, b) => b[1] - a[1])
+                        .slice(0, 8);
 
                     // Process Violations
                     const violationCounts = { "Camera Off": 0, "Face Mismatch": 0, "Multiple Faces": 0, "Phone Detected": 0 };
@@ -174,12 +179,13 @@ const AdminDashboardPage = () => {
                             }]
                         },
                         roleWise: {
-                            labels: Object.keys(roles),
+                            labels: topRoles.map(r => r[0]),
                             datasets: [{
                                 label: "Interviews",
-                                data: Object.values(roles),
+                                data: topRoles.map(r => r[1]),
                                 backgroundColor: chartColors.primary,
-                                borderRadius: 6,
+                                borderRadius: 4,
+                                barThickness: 20,
                             }]
                         },
                         violations: {
@@ -208,28 +214,42 @@ const AdminDashboardPage = () => {
     const commonOptions = {
         responsive: true,
         maintainAspectRatio: false,
+        indexAxis: 'x' as const,
         plugins: {
-            legend: {
-                display: false,
-            },
+            legend: { display: false },
+            tooltip: {
+                backgroundColor: 'rgba(15, 23, 42, 0.9)',
+                titleFont: { size: 13, weight: 'bold' as const },
+                padding: 12,
+                cornerRadius: 8,
+                displayColors: false
+            }
         },
         scales: {
             y: {
                 beginAtZero: true,
-                grid: {
-                    color: "rgba(255, 255, 255, 0.05)",
-                },
-                ticks: {
-                    color: "rgba(255, 255, 255, 0.5)",
-                },
+                grid: { color: "rgba(255, 255, 255, 0.03)" },
+                ticks: { color: "rgba(255, 255, 255, 0.4)", font: { size: 11 } },
             },
             x: {
-                grid: {
-                    display: false,
-                },
-                ticks: {
-                    color: "rgba(255, 255, 255, 0.5)",
-                },
+                grid: { display: false },
+                ticks: { color: "rgba(255, 255, 255, 0.4)", font: { size: 11 } },
+            },
+        },
+    };
+
+    const horizontalBarOptions = {
+        ...commonOptions,
+        indexAxis: 'y' as const,
+        scales: {
+            x: {
+                beginAtZero: true,
+                grid: { color: "rgba(255, 255, 255, 0.03)" },
+                ticks: { color: "rgba(255, 255, 255, 0.4)", font: { size: 11 } },
+            },
+            y: {
+                grid: { display: false },
+                ticks: { color: "rgba(255, 255, 255, 0.6)", font: { size: 11 } },
             },
         },
     };
@@ -253,11 +273,11 @@ const AdminDashboardPage = () => {
     };
 
     const statCards = [
-        { title: "Total Users", value: stats.totalUsers, icon: Users, color: "text-blue-400" },
-        { title: "Total Interviews", value: stats.totalInterviews, icon: Video, color: "text-purple-400" },
-        { title: "Interviews Today", value: stats.interviewsToday, icon: Calendar, color: "text-green-400" },
-        { title: "Cheating Incidents", value: stats.cheatingIncidents, icon: AlertCircle, color: "text-orange-400" },
-        { title: "Face Mismatches", value: stats.faceMismatches, icon: ShieldAlert, color: "text-red-400" },
+        { title: "Total Users", value: stats.totalUsers, icon: Users, color: "text-blue-400", path: "/admin/users" },
+        { title: "Total Interviews", value: stats.totalInterviews, icon: Video, color: "text-purple-400", path: "/admin/interviews" },
+        { title: "Interviews Today", value: stats.interviewsToday, icon: Calendar, color: "text-green-400", path: "/admin/interviews" },
+        { title: "Cheating Incidents", value: stats.cheatingIncidents, icon: AlertCircle, color: "text-orange-400", path: "/admin/proctoring" },
+        { title: "Face Mismatches", value: stats.faceMismatches, icon: ShieldAlert, color: "text-red-400", path: "/admin/proctoring" },
     ];
 
     // Helper for loading skeletons
@@ -291,22 +311,28 @@ const AdminDashboardPage = () => {
                     {statCards.map((stat, index) => (
                         <motion.div
                             key={index}
-                            initial={{ opacity: 0, y: 20 }}
+                            initial={{ opacity: 0, y: 10 }}
                             animate={{ opacity: 1, y: 0 }}
-                            transition={{ delay: index * 0.1 }}
+                            transition={{ delay: index * 0.05 }}
+                            className="cursor-pointer"
+                            onClick={() => navigate(stat.path || '#')}
                         >
-                            <Card className="hover:border-primary/50 transition-colors">
-                                <CardContent className="p-6">
-                                    {loading ? <CardSkeleton /> : (
-                                        <div className="flex justify-between items-start">
-                                            <div>
-                                                <p className="text-text-secondary text-sm mb-1">{stat.title}</p>
-                                                <h3 className="text-2xl font-bold text-text-primary">{stat.value.toLocaleString()}</h3>
-                                            </div>
-                                            <stat.icon className={`w-6 h-6 ${stat.color} opacity-80`} />
-                                        </div>
-                                    )}
-                                </CardContent>
+                            <Card className="h-full hover:bg-white/5 transition-colors border-border duration-200">
+                                <div className="flex items-center justify-between">
+                                    <div className="flex flex-col">
+                                        {stat.title.split(' ').map((word, idx) => (
+                                            <span key={idx} className="text-text-secondary text-[11px] uppercase tracking-wider font-bold opacity-60 leading-tight">
+                                                {word}
+                                            </span>
+                                        ))}
+                                        <h3 className="text-2xl lg:text-3xl font-bold text-text-primary mt-1">
+                                            {loading ? "..." : stat.value.toLocaleString()}
+                                        </h3>
+                                    </div>
+                                    <div className={`p-2.5 rounded-xl bg-card border border-border/50 flex items-center justify-center shrink-0`}>
+                                        <stat.icon className={`w-5 h-5 ${stat.color} opacity-80`} />
+                                    </div>
+                                </div>
                             </Card>
                         </motion.div>
                     ))}
@@ -330,7 +356,7 @@ const AdminDashboardPage = () => {
                             <CardTitle className="text-lg">Role-wise Interviews</CardTitle>
                         </CardHeader>
                         <CardContent className="h-[300px]">
-                            {loading ? <ChartSkeleton /> : <Bar data={chartData.roleWise} options={commonOptions} />}
+                            {loading ? <ChartSkeleton /> : <Bar data={chartData.roleWise} options={horizontalBarOptions} />}
                         </CardContent>
                     </Card>
 

@@ -60,7 +60,7 @@ const InterviewManagementPage = () => {
 
                 setInterviews(mapped);
                 setTotalPages(data.totalPages || 1);
-                setTotalInterviews(data.totalResults || data.totalInterviews || mapped.length);
+                setTotalInterviews(data.totalResults || data.totalInterviews || data.total || (data.totalPages ? data.totalPages * 10 : mapped.length));
             }
         } catch (err) {
             console.error("Failed to fetch interviews:", err);
@@ -197,8 +197,8 @@ const InterviewManagementPage = () => {
                 {/* Pagination Controls */}
                 {totalPages > 1 && (
                     <div className="flex flex-col sm:flex-row items-center justify-between gap-4 mt-6 px-2">
-                        <p className="text-sm text-text-secondary order-2 sm:order-1">
-                            Showing <span className="font-semibold text-text-primary">{interviews.length}</span> of <span className="font-semibold text-text-primary">{totalInterviews}</span> interviews
+                        <p className="text-sm text-text-secondary order-2 sm:order-1 font-medium">
+                            Showing <span className="font-bold text-text-primary">{(currentPage - 1) * 10 + 1}-{Math.min(currentPage * 10, totalInterviews)}</span> of <span className="font-bold text-text-primary underline decoration-primary/30 underline-offset-4">{totalInterviews}</span> interviews
                         </p>
                         <div className="flex items-center gap-2 order-1 sm:order-2">
                             <Button

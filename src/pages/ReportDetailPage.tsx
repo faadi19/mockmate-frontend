@@ -83,16 +83,17 @@ export default function ReportDetailPage() {
         const raw = res?.data?.report ?? res?.data ?? {};
 
         // Normalize (do NOT hardcode data; just map possible keys)
-        const answerQualityRaw = raw?.answerQuality ?? raw?.evaluation ?? raw ?? {};
-        const bodyLanguageRaw = raw?.bodyLanguage ?? raw?.body_language ?? raw?.body ?? {};
+        const answerQualityRaw = raw?.answerQuality ?? raw?.evaluation ?? raw?.feedback?.evaluation ?? raw ?? {};
+        const bodyLanguageRaw = raw?.bodyLanguage ?? raw?.body_language ?? raw?.body ?? raw?.feedback?.body_language ?? {};
+        const feedbackRaw = raw?.feedback ?? {};
 
         const normalized: ReportDetail = {
           id: String(raw?._id || raw?.id || id),
           role: raw?.role || raw?.desiredRole || raw?.interviewRole || raw?.setup?.desiredRole,
           date: raw?.date || raw?.createdAt || raw?.updatedAt,
-          overallPercentage: safeNum(raw?.overallPercentage ?? raw?.overallScore ?? raw?.score ?? raw?.totalScore),
+          overallPercentage: safeNum(raw?.overallPercentage ?? raw?.overallScore ?? raw?.score ?? raw?.totalScore ?? feedbackRaw?.overall_score ?? feedbackRaw?.score ?? 0),
           totalScore: safeNum(raw?.totalScore ?? raw?.marks),
-          aiSummary: raw?.aiSummary || raw?.summary || raw?.finalSummary || "",
+          aiSummary: raw?.aiSummary || raw?.summary || raw?.finalSummary || feedbackRaw?.summary || feedbackRaw?.ai_summary || "",
           answerQuality: {
             technicalAccuracy: safeNum(answerQualityRaw?.technicalAccuracy ?? raw?.technicalAccuracy),
             completeness: safeNum(answerQualityRaw?.completeness ?? raw?.completeness),
@@ -104,24 +105,24 @@ export default function ReportDetailPage() {
             engagement: safeNum(bodyLanguageRaw?.engagement),
             attention: safeNum(bodyLanguageRaw?.attention),
             stability: safeNum(bodyLanguageRaw?.stability),
-            dominantExpression: bodyLanguageRaw?.dominantExpression,
+            dominantExpression: bodyLanguageRaw?.dominantExpression || bodyLanguageRaw?.dominantBehavior || bodyLanguageRaw?.dominant_behavior,
             expressionConfidence: safeNum(bodyLanguageRaw?.expressionConfidence),
             overallScore: safeNum(bodyLanguageRaw?.overallScore),
           },
           questions: Array.isArray(raw?.questions)
             ? raw.questions.map((q: any) => ({
+              question: String(q?.question ?? ""),
+              answer: q?.answer,
+              score: safeNum(q?.score),
+              feedback: q?.feedback,
+            }))
+            : Array.isArray(raw?.perQuestion)
+              ? raw.perQuestion.map((q: any) => ({
                 question: String(q?.question ?? ""),
                 answer: q?.answer,
                 score: safeNum(q?.score),
                 feedback: q?.feedback,
               }))
-            : Array.isArray(raw?.perQuestion)
-              ? raw.perQuestion.map((q: any) => ({
-                  question: String(q?.question ?? ""),
-                  answer: q?.answer,
-                  score: safeNum(q?.score),
-                  feedback: q?.feedback,
-                }))
               : [],
         };
 
@@ -385,11 +386,10 @@ export default function ReportDetailPage() {
                       </div>
                     ) : improvementDelta == null ? null : (
                       <div
-                        className={`inline-flex items-center gap-2 rounded-full border px-3 py-1 text-sm ${
-                          improvementDelta >= 0
+                        className={`inline-flex items-center gap-2 rounded-full border px-3 py-1 text-sm ${improvementDelta >= 0
                             ? "border-success/35 bg-success/10 text-success"
                             : "border-error/35 bg-error/10 text-error"
-                        }`}
+                          }`}
                       >
                         {improvementDelta >= 0 ? (
                           <TrendingUp className="h-4 w-4" />

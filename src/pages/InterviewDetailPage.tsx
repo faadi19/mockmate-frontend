@@ -53,24 +53,56 @@ const InterviewDetailPage = () => {
                 });
 
                 if (response.ok) {
-                    const data = await response.json();
+                    const json = await response.json();
+                    console.log("Interview Detail Raw JSON:", json); // For debugging
+
+                    // Unwrap if nested (added report check)
+                    const data = json.report || json.interview || json.session || json.data || json;
 
                     // Map backend data
+                    const feedback = data.feedback || {};
+                    const evalData = data.evaluation || data.answerQuality || feedback.evaluation || {};
+                    const scoresRaw = evalData.scores || evalData || {};
+                    const bodyLang = data.bodyLanguage || feedback.body_language || {};
+
                     const details: InterviewDetail = {
                         id: data.sessionId || data._id || id || "",
-                        userName: data.userName || data.user?.name || "Unknown",
+                        userName:
+                            data.userName ||
+                            data.user?.name ||
+                            data.userId?.name ||
+                            (data.user?.firstName ? `${data.user.firstName} ${data.user.lastName || ''}`.trim() : null) ||
+                            (data.userId?.firstName ? `${data.userId.firstName} ${data.userId.lastName || ''}`.trim() : null) ||
+                            data.candidateName ||
+                            "Unknown User",
                         role: data.role || data.setup?.role || "N/A",
                         date: data.date || new Date(data.createdAt).toLocaleDateString(),
                         status: data.status || (data.isTerminated ? "Terminated" : "Completed"),
-                        overallScore: data.overallScore || data.score || 0,
+                        overallScore: Math.round(
+                            data.overallScore ??
+                            data.score ??
+                            data.overallPercentage ??
+                            evalData.overallScore ??
+                            evalData.score ??
+                            feedback.overall_score ??
+                            feedback.score ??
+                            0
+                        ),
                         duration: data.duration || "N/A",
                         terminationReason: data.terminationReason || null,
-                        aiSummary: data.evaluation?.summary || data.aiSummary || "No summary available.",
+                        aiSummary:
+                            data.aiSummary ||
+                            data.summary ||
+                            evalData.summary ||
+                            evalData.aiSummary ||
+                            feedback.summary ||
+                            feedback.ai_summary ||
+                            "No summary available.",
                         scores: {
-                            technical: data.evaluation?.scores?.technical || 0,
-                            communication: data.evaluation?.scores?.communication || 0,
-                            problemSolving: data.evaluation?.scores?.problemSolving || 0,
-                            confidence: data.evaluation?.scores?.confidence || 0
+                            technical: Math.round(scoresRaw.technical || scoresRaw.technicalAccuracy || 0),
+                            communication: Math.round(scoresRaw.communication || scoresRaw.completeness || 0),
+                            problemSolving: Math.round(scoresRaw.problemSolving || 0),
+                            confidence: Math.round(scoresRaw.confidence || bodyLang.expressionConfidence || bodyLang.confidence || 0)
                         },
                         transcript: data.transcript || [],
                         violations: data.violations || []

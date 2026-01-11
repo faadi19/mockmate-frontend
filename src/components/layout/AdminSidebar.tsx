@@ -6,8 +6,6 @@ import {
     Video,
     AlertTriangle,
     FileCheck,
-    Settings,
-    Library,
     LogOut,
     X
 } from 'lucide-react';
@@ -51,21 +49,10 @@ const AdminSidebar = ({ onClose }: AdminSidebarProps) => {
             name: 'All Reports',
             path: '/admin/reports',
             icon: FileCheck,
-        },
-        {
-            name: 'Role & Questions',
-            path: '/admin/content',
-            icon: Library,
         }
     ];
 
-    const bottomNavItems = [
-        {
-            name: 'AI Settings',
-            path: '/admin/settings',
-            icon: Settings,
-        }
-    ];
+    const bottomNavItems: any[] = [];
 
     const handleLogoutClick = () => {
         setLogoutModalOpen(true);

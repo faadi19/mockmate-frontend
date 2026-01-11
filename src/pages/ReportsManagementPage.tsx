@@ -10,11 +10,10 @@ import {
     Search,
     FileText,
     Download,
-    Scale,
-    Calendar,
     Filter,
     BarChart3,
-    ChevronRight
+    Calendar,
+    Scale
 } from "lucide-react";
 import { useNavigate } from "react-router-dom";
 
@@ -23,7 +22,7 @@ const ReportsManagementPage = () => {
     const reduceMotion = useReducedMotion();
     const [searchQuery, setSearchQuery] = useState("");
     const [roleFilter, setRoleFilter] = useState("all");
-    const [selectedReports, setSelectedReports] = useState<string[]>([]);
+    const [selectedReports, setSelectedReports] = useState<any[]>([]);
     const [loading, setLoading] = useState(true);
     const [reports, setReports] = useState<any[]>([]);
 
@@ -56,18 +55,55 @@ const ReportsManagementPage = () => {
                 // Robustly extract the reports/interviews array
                 const rawReports = data.interviews || data.reports || data.data || (Array.isArray(data) ? data : []);
 
-                const normalized = (Array.isArray(rawReports) ? rawReports : []).map((r: any) => ({
-                    id: r._id || r.id || "N/A",
-                    userName: r.userId?.name || r.userName || "Unknown User",
-                    role: r.role || r.setup?.role || "Interview",
-                    date: r.createdAt ? new Date(r.createdAt).toLocaleDateString() : "N/A",
-                    score: Math.round(r.overallScore || r.score || (r.feedback?.overall_score) || 0),
-                    behavior: r.feedback?.dominant_behavior || "Analyzed",
-                }));
+                const normalized = (Array.isArray(rawReports) ? rawReports : []).map((r: any) => {
+                    // Extract Score
+                    const rawScore = r.overallScore ?? r.overall_score ?? r.overallPercentage ?? r.score ?? r.feedback?.overall_score ?? r.feedback?.score ?? 0;
+                    const score = Math.round(Number(rawScore) || 0);
+
+                    // Extract Dominant Behavior (Enhanced check)
+                    let behavior = "Neutral";
+
+                    // Priority 1: Direct dominant fields
+                    const directDom = r.dominant_behavior ?? r.dominantBehavior ?? r.dominantExpression ??
+                        r.feedback?.dominant_behavior ?? r.feedback?.dominantBehavior ??
+                        r.bodyLanguage?.dominantBehavior ?? r.bodyLanguage?.dominantExpression ?? r.bodyLanguage?.dominant_behavior;
+
+                    if (directDom && typeof directDom === 'string') {
+                        behavior = directDom.charAt(0).toUpperCase() + directDom.slice(1);
+                    }
+                    // Priority 2: Calculate from behavior object if counts exist
+                    else {
+                        const bObj = r.behavior ?? r.bodyLanguage?.behavior ?? r.feedback?.behavior;
+                        if (bObj && typeof bObj === 'object') {
+                            const scores = [
+                                { key: 'Confident', val: bObj.confident ?? bObj.Confident ?? 0 },
+                                { key: 'Nervous', val: bObj.nervous ?? bObj.Nervous ?? 0 },
+                                { key: 'Distracted', val: bObj.distracted ?? bObj.Distracted ?? 0 }
+                            ];
+                            const dominant = scores.reduce((prev, current) => (prev.val > current.val) ? prev : current);
+                            if (dominant.val > 0) {
+                                behavior = dominant.key;
+                            }
+                        }
+                    }
+
+                    return {
+                        id: r._id || r.id || "N/A",
+                        userName: r.userId?.name || r.userName || r.user?.name || "Unknown User",
+                        role: r.role || r.setup?.role || r.interviewRole || "Interview",
+                        date: r.createdAt ? new Date(r.createdAt).toLocaleDateString() : (r.date || "N/A"),
+                        score: score,
+                        behavior: behavior,
+                    };
+                });
 
                 setReports(normalized);
                 setTotalPages(data.totalPages || 1);
-                setTotalReports(data.totalResults || data.totalInterviews || normalized.length);
+
+                // Get correct total count from all possible keys
+                const total = data.totalResults || data.totalInterviews || data.total || data.totalCount ||
+                    (data.totalPages ? data.totalPages * 12 : normalized.length);
+                setTotalReports(total);
             }
         } catch (err) {
             console.error("Failed to fetch reports:", err);
@@ -84,16 +120,49 @@ const ReportsManagementPage = () => {
         return reports;
     }, [reports]);
 
-    const toggleSelection = (id: string) => {
-        setSelectedReports(prev =>
-            prev.includes(id) ? prev.filter(item => item !== id) : prev.length < 2 ? [...prev, id] : [prev[1], id]
-        );
+    const toggleSelection = (report: any) => {
+        setSelectedReports(prev => {
+            const exists = prev.some(r => r.id === report.id);
+            return exists ? prev.filter(r => r.id !== report.id) : [...prev, report];
+        });
     };
 
-    const handleCompare = () => {
-        if (selectedReports.length === 2) {
-            navigate(`/reports/compare?left=${selectedReports[0]}&right=${selectedReports[1]}`);
-        }
+    const handleExportCSV = () => {
+        if (selectedReports.length === 0) return;
+
+        const headers = ["Report ID", "User Name", "Role", "Date", "Overall Score", "Dominant Behavior"];
+
+        // Download separate CSV for EACH selected report
+        selectedReports.forEach((r, index) => {
+            const csvContent = [
+                headers.join(","),
+                [
+                    r.id,
+                    `"${r.userName.replace(/"/g, '""')}"`,
+                    `"${r.role}"`,
+                    `"${r.date}"`,
+                    `${r.score}%`,
+                    `"${r.behavior}"`
+                ].join(",")
+            ].join("\n");
+
+            const blob = new Blob([csvContent], { type: "text/csv;charset=utf-8;" });
+            const link = document.createElement("a");
+            if (link.download !== undefined) {
+                const url = URL.createObjectURL(blob);
+                link.setAttribute("href", url);
+                // Filename includes ID and Name for clarity
+                link.setAttribute("download", `Report_${r.userName.replace(/\s+/g, '_')}_${r.id}.csv`);
+                link.style.visibility = 'hidden';
+                document.body.appendChild(link);
+
+                // Add slight delay to prevent browser blocking multiple downloads
+                setTimeout(() => {
+                    link.click();
+                    document.body.removeChild(link);
+                }, index * 500);
+            }
+        });
     };
 
     return (
@@ -105,22 +174,14 @@ const ReportsManagementPage = () => {
                     sideButtons={
                         <div className="flex gap-2">
                             <Button
-                                variant="outline"
-                                size="sm"
-                                disabled={selectedReports.length !== 2}
-                                onClick={handleCompare}
-                                icons={<Scale className="w-4 h-4" />}
-                                iconsPosition="left"
-                            >
-                                Compare ({selectedReports.length})
-                            </Button>
-                            <Button
                                 variant="default"
                                 size="sm"
+                                disabled={selectedReports.length === 0}
+                                onClick={handleExportCSV}
                                 icons={<Download className="w-4 h-4" />}
                                 iconsPosition="left"
                             >
-                                Export CSV
+                                Export CSV {selectedReports.length > 0 && `(${selectedReports.length})`}
                             </Button>
                         </div>
                     }
@@ -177,11 +238,11 @@ const ReportsManagementPage = () => {
                                 animate={{ opacity: 1, scale: 1 }}
                                 transition={{ delay: idx * 0.05 }}
                             >
-                                <Card className={`group hover:border-primary/40 transition-all duration-300 relative ${selectedReports.includes(r.id) ? 'border-primary bg-primary/[0.03] ring-1 ring-primary/50' : ''
+                                <Card className={`group hover:border-primary/40 transition-all duration-300 relative ${selectedReports.some(item => item.id === r.id) ? 'border-primary bg-primary/[0.03] ring-1 ring-primary/50' : ''
                                     }`}>
                                     <CardContent className="p-6">
                                         <div className="flex justify-between items-start mb-4">
-                                            <div className="flex items-center gap-3">
+                                            <div className="flex items-center gap-3 cursor-pointer" onClick={() => navigate(`/reports/${r.id}`)}>
                                                 <div className="w-10 h-10 rounded-xl bg-primary/10 flex items-center justify-center group-hover:bg-primary group-hover:text-white transition-colors duration-300">
                                                     <FileText className="w-5 h-5" />
                                                 </div>
@@ -194,8 +255,8 @@ const ReportsManagementPage = () => {
                                                 <input
                                                     type="checkbox"
                                                     className="w-4 h-4 border-border rounded text-primary focus:ring-primary/30 cursor-pointer"
-                                                    checked={selectedReports.includes(r.id)}
-                                                    onChange={() => toggleSelection(r.id)}
+                                                    checked={selectedReports.some(item => item.id === r.id)}
+                                                    onChange={() => toggleSelection(r)}
                                                 />
                                             </div>
                                         </div>
@@ -215,19 +276,11 @@ const ReportsManagementPage = () => {
                                             </div>
                                         </div>
 
-                                        <div className="flex items-center justify-between pt-4 border-t border-border">
-                                            <div className="flex flex-col">
+                                        <div className="flex items-center justify-center pt-4 border-t border-border">
+                                            <div className="flex flex-col items-center">
                                                 <p className="text-[10px] text-text-secondary uppercase font-bold mb-0.5">Overall Score</p>
                                                 <p className="text-2xl font-bold text-primary">{r.score}%</p>
                                             </div>
-                                            <Button
-                                                variant="ghost"
-                                                size="sm"
-                                                className="p-2 h-auto rounded-xl hover:bg-primary/10 group/btn"
-                                                onClick={() => navigate(`/reports/${r.id}`)}
-                                            >
-                                                <ChevronRight className="w-6 h-6 text-text-secondary group-hover/btn:text-primary group-hover/btn:translate-x-1 transition-all" />
-                                            </Button>
                                         </div>
                                     </CardContent>
                                 </Card>
@@ -239,8 +292,8 @@ const ReportsManagementPage = () => {
                 {/* Pagination Controls */}
                 {totalPages > 1 && (
                     <div className="flex flex-col sm:flex-row items-center justify-between gap-4 mt-8 px-2">
-                        <p className="text-sm text-text-secondary order-2 sm:order-1">
-                            Showing <span className="font-semibold text-text-primary">{reports.length}</span> of <span className="font-semibold text-text-primary">{totalReports}</span> reports
+                        <p className="text-sm text-text-secondary order-2 sm:order-1 font-medium">
+                            Showing <span className="font-bold text-text-primary">{(currentPage - 1) * 12 + 1}-{Math.min(currentPage * 12, totalReports)}</span> of <span className="font-bold text-text-primary underline decoration-primary/30 underline-offset-4">{totalReports}</span> reports
                         </p>
                         <div className="flex items-center gap-2 order-1 sm:order-2">
                             <Button

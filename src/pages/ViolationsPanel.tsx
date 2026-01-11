@@ -77,7 +77,7 @@ const ViolationsPanel = () => {
 
                 setViolations(extractedViolations);
                 setTotalPages(data.totalPages || 1);
-                setTotalViolations(data.totalResults || data.totalViolations || extractedViolations.length);
+                setTotalViolations(data.totalResults || data.totalViolations || data.total || (data.totalPages ? data.totalPages * 10 : extractedViolations.length));
             }
         } catch (err) {
             console.error("Failed to fetch violations:", err);
@@ -255,8 +255,8 @@ const ViolationsPanel = () => {
                 {/* Pagination Controls */}
                 {totalPages > 1 && (
                     <div className="flex flex-col sm:flex-row items-center justify-between gap-4 mt-6 px-2">
-                        <p className="text-sm text-text-secondary order-2 sm:order-1">
-                            Showing <span className="font-semibold text-text-primary">{violations.length}</span> of <span className="font-semibold text-text-primary">{totalViolations}</span> flags
+                        <p className="text-sm text-text-secondary order-2 sm:order-1 font-medium">
+                            Showing <span className="font-bold text-text-primary">{(currentPage - 1) * 10 + 1}-{Math.min(currentPage * 10, totalViolations)}</span> of <span className="font-bold text-text-primary underline decoration-primary/30 underline-offset-4">{totalViolations}</span> security flags
                         </p>
                         <div className="flex items-center gap-2 order-1 sm:order-2">
                             <Button

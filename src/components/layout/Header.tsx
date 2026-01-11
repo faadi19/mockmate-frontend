@@ -34,6 +34,8 @@ const Header = ({ onMenuClick }: HeaderProps) => {
     navigate("/login");
   };
 
+  const isAdminPath = window.location.pathname.startsWith('/admin');
+
   const menuItems = [
     {
       icon: Settings,
@@ -43,6 +45,7 @@ const Header = ({ onMenuClick }: HeaderProps) => {
         navigate("/profile-settings");
       },
       color: "#a855f7",
+      show: !isAdminPath
     },
     {
       icon: HelpCircle,
@@ -52,6 +55,7 @@ const Header = ({ onMenuClick }: HeaderProps) => {
         navigate("/help");
       },
       color: "#3c9a72",
+      show: !isAdminPath
     },
     {
       icon: LogOut,
@@ -61,8 +65,9 @@ const Header = ({ onMenuClick }: HeaderProps) => {
         setShowLogoutModal(true);
       },
       color: "#f6616a",
+      show: true
     },
-  ];
+  ].filter(item => item.show);
 
   return (
     <>
@@ -106,8 +111,8 @@ const Header = ({ onMenuClick }: HeaderProps) => {
                   key={item.label}
                   onClick={item.onClick}
                   className={`w-full flex items-center gap-3 lg:gap-[0.8vw] px-4 py-3 lg:px-[1vw] lg:py-[0.8vw] hover:bg-primary/10 transition-all duration-200 group ${index !== menuItems.length - 1
-                      ? "border-b border-border"
-                      : ""
+                    ? "border-b border-border"
+                    : ""
                     }`}
                 >
                   <item.icon
