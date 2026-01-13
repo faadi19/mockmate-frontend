@@ -8,7 +8,6 @@ import { Card, CardContent } from "../components/ui/Card";
 import Button from "../components/ui/Button";
 import {
     Search,
-    UserPlus,
     Eye,
     ShieldCheck,
     Shield

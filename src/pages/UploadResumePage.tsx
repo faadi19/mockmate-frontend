@@ -1,4 +1,4 @@
-import { useState, useRef } from "react";
+import { useState, useRef, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
 import { motion, useReducedMotion } from "framer-motion";
 import { Upload, FileText, X, CheckCircle2, AlertCircle, ArrowRight } from "lucide-react";
@@ -9,6 +9,7 @@ import { Card, CardContent } from "../components/ui/Card";
 import AnimatedPage from "../components/ui/AnimatedPage";
 import axios from "axios";
 import { API_BASE_URL } from "../config/api";
+import { useFaceVerification } from "../hooks/useFaceVerification";
 
 const UploadResumePage = () => {
   const navigate = useNavigate();
@@ -23,7 +24,7 @@ const UploadResumePage = () => {
   const [showReview, setShowReview] = useState(false);
   const [jobDescription, setJobDescription] = useState<string[]>([]);
   const [isValidRole, setIsValidRole] = useState<boolean | null>(null);
-  const [loadingJD, setLoadingJD] = useState(false);
+  // const [loadingJD, setLoadingJD] = useState(false); // Removed unused state
   const [sessionId, setSessionId] = useState<string | null>(null);
   const [setupId, setSetupId] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
@@ -188,7 +189,17 @@ const UploadResumePage = () => {
 
           // Set job description and show review screen
           if (Array.isArray(jdArray) && jdArray.length > 0) {
-            const jdList = jdArray.slice(0, 5); // Limit to 4-5 bullet points
+            // Ensure all items are strings to prevent React rendering errors
+            const jdList = jdArray
+              .slice(0, 5)
+              .map((item: any) => {
+                if (typeof item === 'string') return item;
+                if (typeof item === 'object' && item !== null) {
+                  return item.text || item.description || item.content || JSON.stringify(item);
+                }
+                return String(item);
+              });
+
             console.log("Setting JD:", jdList);
             setJobDescription(jdList);
             setIsValidRole(true);
@@ -214,10 +225,17 @@ const UploadResumePage = () => {
       }
     } catch (error: any) {
       setUploadStatus("error");
-      setErrorMessage(
-        error.response?.data?.message ||
-        "Failed to upload resume. Please try again."
-      );
+      const status = error.response?.status;
+      if (status === 400 || status === 422) {
+        setErrorMessage(
+          "Uploaded file does not appear to be a professional resume. Please upload a valid CV."
+        );
+      } else {
+        setErrorMessage(
+          error.response?.data?.message ||
+          "Failed to upload resume. Please try again."
+        );
+      }
     } finally {
       setIsUploading(false);
     }
@@ -286,6 +304,68 @@ const UploadResumePage = () => {
     }
   };
 
+  // Face Verification State
+  const [showFaceVerification, setShowFaceVerification] = useState(false);
+  const [cameraStream, setCameraStream] = useState<MediaStream | null>(null);
+  const videoRef = useRef<HTMLVideoElement | null>(null);
+  const [localError, setLocalError] = useState<string | null>(null);
+  const [isStartingInterview, setIsStartingInterview] = useState(false);
+
+  // Sync camera stream with video element
+  useEffect(() => {
+    if (cameraStream && videoRef.current) {
+      videoRef.current.srcObject = cameraStream;
+    }
+  }, [cameraStream, showFaceVerification]);
+
+  // Start Camera for Face Verification
+  const startCamera = async () => {
+    try {
+      const stream = await navigator.mediaDevices.getUserMedia({ video: true });
+      setCameraStream(stream);
+      setLocalError(null);
+    } catch (err: any) {
+      console.error("Error accessing camera:", err);
+      setLocalError("Could not access camera. Please ensure permissions are granted.");
+    }
+  };
+
+  // Stop Camera
+  const stopCamera = () => {
+    if (cameraStream) {
+      cameraStream.getTracks().forEach((track) => track.stop());
+      setCameraStream(null);
+    }
+  };
+
+  // Initial Face Verification Check
+  const { performVerification, isVerifying, error: faceApiError } = useFaceVerification({
+    enabled: false, // We'll trigger it manually
+    videoElement: videoRef.current,
+  });
+
+  // Full Screen Loader Overlay
+  if (isStartingInterview) {
+    return (
+      <div className="fixed inset-0 z-[100] bg-background/80 backdrop-blur-md flex flex-col items-center justify-center">
+        <div className="relative mb-6">
+          <div className="w-20 h-20 rounded-full border-4 border-primary/20 animate-pulse"></div>
+          <div className="absolute inset-0 w-20 h-20 rounded-full border-4 border-t-primary animate-spin"></div>
+          <CheckCircle2 className="absolute inset-0 m-auto text-primary w-8 h-8 animate-in zoom-in duration-500" />
+        </div>
+        <div className="text-center space-y-3">
+          <h3 className="text-2xl font-bold text-text-primary">Identity Verified</h3>
+          <p className="text-text-secondary text-lg">Preparing your interview session...</p>
+          <div className="flex items-center justify-center gap-2 text-primary/80 text-sm mt-4 animate-pulse">
+            <span className="w-2 h-2 bg-primary rounded-full animate-bounce delay-75"></span>
+            <span className="w-2 h-2 bg-primary rounded-full animate-bounce delay-150"></span>
+            <span className="w-2 h-2 bg-primary rounded-full animate-bounce delay-300"></span>
+          </div>
+        </div>
+      </div>
+    );
+  }
+
   // Review Screen
   if (showReview) {
     return (
@@ -300,7 +380,7 @@ const UploadResumePage = () => {
 
           <div className="flex flex-col gap-6 lg:gap-[1.5vw] max-w-3xl mx-auto">
             {/* Invalid Role Message */}
-            {!loadingJD && isValidRole === false && (
+            {isValidRole === false && (
               <Card className="bg-warning/10 border border-warning/30 rounded-lg">
                 <CardContent className="p-6">
                   <p className="text-warning text-center">
@@ -313,7 +393,7 @@ const UploadResumePage = () => {
             {/* Job Description Card - Always show card */}
             <Card className="bg-background/60 border border-border rounded-lg">
               <CardContent className="p-6">
-                {loadingJD ? (
+                {false ? (
                   <div className="flex items-center justify-center py-8">
                     <p className="text-text-secondary">Loading job description...</p>
                   </div>
@@ -346,23 +426,117 @@ const UploadResumePage = () => {
               <p className="text-sm text-red-400">{error}</p>
             )}
 
-            {/* Start Interview Button */}
-            <Button
-              onClick={handleStartInterview}
-              className="w-full flex items-center justify-center gap-2"
-              disabled={loading}
-              loading={loading}
-              icons={
-                !loading ? (
-                  <ArrowRight className="size-5 lg:size-[1.5vw] text-text-secondary" />
-                ) : undefined
-              }
-              iconsPosition="right"
-              rounded
-              size="lg"
-            >
-              {loading ? "Starting Interview..." : "Start Interview"}
-            </Button>
+            {/* Start Interview / Verify Face Button */}
+            {!showFaceVerification ? (
+              <Button
+                onClick={() => {
+                  setShowFaceVerification(true);
+                  startCamera();
+                }}
+                className="w-full flex items-center justify-center gap-2"
+                disabled={loading}
+                loading={loading}
+                icons={
+                  !loading ? (
+                    <ArrowRight className="size-5 lg:size-[1.5vw] text-text-secondary" />
+                  ) : undefined
+                }
+                iconsPosition="right"
+                rounded
+                size="lg"
+              >
+                {loading ? "Preparing..." : "Proceed to Identity Verification"}
+              </Button>
+            ) : (
+              <div className="flex flex-col gap-4 w-full">
+                <Card className="bg-background/60 border border-border rounded-lg overflow-hidden">
+                  <CardContent className="p-0 relative aspect-video bg-black flex items-center justify-center">
+                    <video
+                      ref={videoRef}
+                      autoPlay
+                      playsInline
+                      muted
+                      className="w-full h-full object-cover"
+                    />
+                    {!cameraStream && !localError && (
+                      <p className="text-text-secondary absolute">Initializing camera...</p>
+                    )}
+                    {localError && !cameraStream && (
+                      <p className="text-red-400 absolute px-4 text-center">{localError}</p>
+                    )}
+                    {isVerifying && (
+                      <div className="absolute inset-0 bg-black/40 flex items-center justify-center">
+                        <div className="flex flex-col items-center gap-2">
+                          <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary"></div>
+                          <p className="text-white text-sm font-semibold">Verifying Identity...</p>
+                        </div>
+                      </div>
+                    )}
+                  </CardContent>
+                </Card>
+
+                {localError && cameraStream && (
+                  <div className="mb-4 p-3 bg-red-900/20 border border-red-500/30 rounded-lg animate-in fade-in slide-in-from-top-2 duration-300 mt-2">
+                    <p className="text-sm text-red-400 text-center font-medium">
+                      {localError}
+                    </p>
+                  </div>
+                )}
+
+                {faceApiError && <p className="text-sm text-red-400 text-center">{faceApiError}</p>}
+
+                <div className="flex gap-4">
+                  <Button
+                    onClick={() => {
+                      setShowFaceVerification(false);
+                      stopCamera();
+                    }}
+                    variant="outline"
+                    className="flex-1"
+                    disabled={loading || isVerifying}
+                  >
+                    Back
+                  </Button>
+                  <Button
+                    onClick={async () => {
+                      if (!videoRef.current) return;
+                      setLoading(true);
+                      setLocalError(null); // Clear previous errors on new attempt
+                      try {
+                        const status = await performVerification();
+
+                        if (status === 'SUCCESS') {
+                          // Successful verification - show loader then start
+                          setIsStartingInterview(true);
+                          stopCamera();
+                          // Add a small delay for the user to see the success state if needed, 
+                          // but the loader itself is good feedback.
+                          await handleStartInterview();
+                        } else {
+                          setLoading(false);
+                          if (status === 'NO_FACE') {
+                            setLocalError("Face not detected. Please ensure you are clearly visible in the camera frame.");
+                          } else if (status === 'MULTI_FACE') {
+                            setLocalError("Multiple faces detected. Please ensure only you are present in the frame.");
+                          } else if (status === 'WRONG_FACE') {
+                            setLocalError("Identity Mismatch: The person on camera does not match the registered candidate. Please ensure the correct candidate is present.");
+                          } else {
+                            setLocalError("An unexpected error occurred during verification. Please try again.");
+                          }
+                        }
+                      } catch (e: any) {
+                        setLoading(false);
+                        setLocalError(e.message || "Verification failed");
+                      }
+                    }}
+                    className="flex-1"
+                    disabled={loading || isVerifying || !cameraStream}
+                    loading={loading}
+                  >
+                    Verify & Start Interview
+                  </Button>
+                </div>
+              </div>)}
           </div>
         </AnimatedPage>
       </AppLayout>
@@ -397,8 +571,8 @@ const UploadResumePage = () => {
               onDragOver={handleDragOver}
               onDrop={handleDrop}
               className={`border-2 border-dashed rounded-xl p-6 sm:p-8 lg:p-12 transition-all duration-300 ${selectedFile
-                  ? "border-primary bg-primary/5"
-                  : "border-border bg-background/30 hover:border-primary/60 hover:bg-primary/5"
+                ? "border-primary bg-primary/5"
+                : "border-border bg-background/30 hover:border-primary/60 hover:bg-primary/5"
                 }`}
             >
               {!selectedFile ? (
@@ -420,7 +594,6 @@ const UploadResumePage = () => {
                   />
                   <label htmlFor="file-upload" className="flex justify-center">
                     <Button
-                      as="span"
                       className="cursor-pointer"
                       onClick={() => fileInputRef.current?.click()}
                     >
@@ -479,15 +652,23 @@ const UploadResumePage = () => {
             )}
 
             {/* Upload Button */}
+            {/* Upload Button */}
             {selectedFile && (
-              <div className="mt-6 flex justify-center">
+              <div className="mt-6 flex flex-col items-center gap-3">
                 <Button
                   onClick={handleUpload}
                   disabled={isUploading}
+                  loading={isUploading}
                   className="min-w-[180px]"
                 >
-                  {isUploading ? "Uploading..." : "Upload Resume"}
+                  {isUploading ? "Analyzing Resume..." : "Upload Resume"}
                 </Button>
+
+                {isUploading && (
+                  <p className="text-sm text-text-secondary animate-pulse">
+                    Please wait while we verify your details...
+                  </p>
+                )}
               </div>
             )}
           </motion.div>

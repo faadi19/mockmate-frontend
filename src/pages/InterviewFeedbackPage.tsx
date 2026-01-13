@@ -75,7 +75,13 @@ const InterviewFeedbackPage = () => {
           problemSolving: data.problemSolving ?? 0,
           questions: data.questions || [],
           totalScore: data.totalScore || 0,
-          overallPercentage: data.overallPercentage || 0,
+          overallPercentage: Math.round(
+            ((data.technicalAccuracy || 0) +
+              (data.completeness || 0) +
+              (data.conciseness || 0) +
+              (data.problemSolving || 0)) /
+            4
+          ),
           aiSummary: data.summary || data.aiSummary || "",
         });
 

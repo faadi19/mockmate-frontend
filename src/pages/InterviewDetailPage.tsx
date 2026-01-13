@@ -13,8 +13,7 @@ import {
     Info,
     AlertCircle,
     Clock,
-    User as UserIcon,
-    Camera
+    User as UserIcon
 } from "lucide-react";
 
 interface InterviewDetail {
@@ -161,7 +160,7 @@ const InterviewDetailPage = () => {
                             </CardHeader>
                             <CardContent>
                                 <p className="text-text-primary leading-relaxed italic">
-                                    "{interviewData.aiSummary}"
+                                    {interviewData.aiSummary.replace(/^"|"$/g, '')}
                                 </p>
                             </CardContent>
                         </Card>

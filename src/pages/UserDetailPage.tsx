@@ -10,10 +10,8 @@ import {
     User,
     Mail,
     Calendar,
-    Target,
     AlertTriangle,
     ChevronRight,
-    ShieldCheck,
     History
 } from "lucide-react";
 

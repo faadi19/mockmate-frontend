@@ -11,7 +11,7 @@ import ProgressBar from "../components/ui/ProgressBar";
 import Button from "../components/ui/Button";
 
 import { Bar, Line } from "react-chartjs-2";
-import { TrendingUp, Briefcase } from "lucide-react";
+import { TrendingUp } from "lucide-react";
 import {
   Chart as ChartJS,
   CategoryScale,
@@ -417,7 +417,7 @@ const PerformancePage = () => {
         borderColor: borderColors,
         borderWidth: borderWidths,
         borderRadius: chartType === "bar" ? 6 : 0,
-        fill: chartType === "area" || chartType === "line",
+        fill: chartType === "line",
         tension: chartType === "bar" ? 0 : 0.4,
         pointRadius: pointRadii,
         pointHoverRadius: chartType === "bar" ? 0 : 7,
@@ -432,7 +432,7 @@ const PerformancePage = () => {
   };
 
   // Handle chart click to select interview
-  const handleChartClick = (event: any, elements: any[]) => {
+  const handleChartClick = (_event: any, elements: any[]) => {
     if (elements && elements.length > 0) {
       const elementIndex = elements[0].index;
       const clickedInterviewId = interviewIds[elementIndex];

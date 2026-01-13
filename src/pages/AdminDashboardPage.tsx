@@ -99,10 +99,10 @@ const AdminDashboardPage = () => {
                     console.error("Summary fetch error:", e);
                 }
 
-                // 2. Fetch Interviews & Violations (Higher limit for charts)
+                // 2. Fetch Interviews & Violations (Reduced limit for performance)
                 const [interviewsRes, violationsRes] = await Promise.all([
-                    fetch(`${API_BASE_URL}/api/admin/interviews?limit=1000`, { headers: { Authorization: `Bearer ${token}` } }).catch(() => null),
-                    fetch(`${API_BASE_URL}/api/admin/violations?limit=1000`, { headers: { Authorization: `Bearer ${token}` } }).catch(() => null)
+                    fetch(`${API_BASE_URL}/api/admin/interviews?limit=200`, { headers: { Authorization: `Bearer ${token}` } }).catch(() => null),
+                    fetch(`${API_BASE_URL}/api/admin/violations?limit=200`, { headers: { Authorization: `Bearer ${token}` } }).catch(() => null)
                 ]);
 
                 let interviews: any[] = [];
@@ -280,13 +280,7 @@ const AdminDashboardPage = () => {
         { title: "Face Mismatches", value: stats.faceMismatches, icon: ShieldAlert, color: "text-red-400", path: "/admin/proctoring" },
     ];
 
-    // Helper for loading skeletons
-    const CardSkeleton = () => (
-        <div className="animate-pulse space-y-3">
-            <div className="h-4 bg-gray-700/50 rounded w-1/2"></div>
-            <div className="h-8 bg-gray-700/50 rounded w-3/4"></div>
-        </div>
-    );
+
 
     const ChartSkeleton = () => (
         <div className="animate-pulse h-full w-full flex items-end gap-2 p-4">

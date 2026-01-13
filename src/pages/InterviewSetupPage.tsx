@@ -1,18 +1,20 @@
 import { useState, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
 import { API_BASE_URL } from "../config/api";
-import { ArrowRight } from "lucide-react";
+import { ArrowRight, CheckCircle2 } from "lucide-react";
 import { motion, useReducedMotion } from "framer-motion";
 import AppLayout from "../components/layout/AppLayout";
 import Button from "../components/ui/Button";
 import ContentHeader from "../components/layout/ContentHeader";
-import InputField from "../components/ui/InputField";
 import { ImagesPath } from "../utils/images";
 import CustomDropdown, { Options } from "../components/ui/CustomDropdown";
 import { Card, CardContent } from "../components/ui/Card";
 import AnimatedPage from "../components/ui/AnimatedPage";
 import { useFaceVerification } from "../hooks/useFaceVerification";
 import { useRef } from "react";
+import { standardizeRole } from "../utils/roleStandardizer";
+import RoleAutocomplete from "../components/ui/RoleAutocomplete";
+import IndustryAutocomplete from "../components/ui/IndustryAutocomplete";
 
 const InterviewSetupPage = () => {
   const navigate = useNavigate();
@@ -32,6 +34,9 @@ const InterviewSetupPage = () => {
   const [cameraStream, setCameraStream] = useState<MediaStream | null>(null);
   const videoRef = useRef<HTMLVideoElement | null>(null);
   const [localError, setLocalError] = useState<string | null>(null);
+  const [isStartingInterview, setIsStartingInterview] = useState(false);
+
+  // No longer needed: Role Autocomplete logic moved to RoleAutocomplete component
 
   const educationOptions = [
     {
@@ -56,22 +61,22 @@ const InterviewSetupPage = () => {
     },
     {
       value: "Self-taught",
-      label: "Self-taught",
+      label: "Self-Taught",
     },
   ];
 
   const experienceLevelOptions = [
     {
       value: "entry level",
-      label: "entry level",
+      label: "Entry Level",
     },
     {
       value: "mid level",
-      label: "mid level",
+      label: "Mid Level",
     },
     {
       value: "senior level",
-      label: "senior level",
+      label: "Senior Level",
     },
   ];
 
@@ -93,8 +98,12 @@ const InterviewSetupPage = () => {
     const fetchJobDescription = async () => {
       try {
         setLoadingJD(true);
-        // Send role AS-IS (no normalization)
-        const roleValue = role.trim();
+        // Standardize the role using our AI-logic utility
+        const standardized = standardizeRole(role);
+        console.log(`Role Standardization: "${role}" -> "${standardized.standardized_role}" (Confidence: ${standardized.confidence_score})`);
+
+        // Use the standardized role if confidence is good provided it's not empty, otherwise fallback to normalized input
+        const roleValue = standardized.standardized_role || standardized.normalized_key || role.trim();
 
         const res = await fetch(`${API_BASE_URL}/api/roles/${encodeURIComponent(roleValue)}/jd`, {
           method: "GET",
@@ -173,8 +182,12 @@ const InterviewSetupPage = () => {
     setError(null);
 
     try {
+      // Re-standardize to ensure consistency
+      const standardized = standardizeRole(role);
+      const finalRole = standardized.standardized_role || role.trim();
+
       const payload = {
-        desiredRole: role,
+        desiredRole: finalRole,
         industry,
         educationLevel: educationLevel.value,
         experienceLevel: experienceLevel.value,
@@ -331,6 +344,28 @@ const InterviewSetupPage = () => {
     }
   };
 
+  // Full Screen Loader Overlay
+  if (isStartingInterview) {
+    return (
+      <div className="fixed inset-0 z-[100] bg-background/80 backdrop-blur-md flex flex-col items-center justify-center">
+        <div className="relative mb-6">
+          <div className="w-20 h-20 rounded-full border-4 border-primary/20 animate-pulse"></div>
+          <div className="absolute inset-0 w-20 h-20 rounded-full border-4 border-t-primary animate-spin"></div>
+          <CheckCircle2 className="absolute inset-0 m-auto text-primary w-8 h-8 animate-in zoom-in duration-500" />
+        </div>
+        <div className="text-center space-y-3">
+          <h3 className="text-2xl font-bold text-text-primary">Identity Verified</h3>
+          <p className="text-text-secondary text-lg">Preparing your interview session...</p>
+          <div className="flex items-center justify-center gap-2 text-primary/80 text-sm mt-4 animate-pulse">
+            <span className="w-2 h-2 bg-primary rounded-full animate-bounce delay-75"></span>
+            <span className="w-2 h-2 bg-primary rounded-full animate-bounce delay-150"></span>
+            <span className="w-2 h-2 bg-primary rounded-full animate-bounce delay-300"></span>
+          </div>
+        </div>
+      </div>
+    );
+  }
+
   // Review Screen
   if (showReview) {
     return (
@@ -478,22 +513,25 @@ const InterviewSetupPage = () => {
                         const status = await performVerification();
 
                         if (status === 'SUCCESS') {
-                          // Successful verification - proceed to start interview session
-                          await handleStartInterview();
+                          // Successful verification - show loader then start
+                          setIsStartingInterview(true);
                           stopCamera();
-                        } else if (status === 'NO_FACE') {
-                          setLocalError("Face not detected. Please ensure you are clearly visible in the camera frame.");
-                        } else if (status === 'MULTI_FACE') {
-                          setLocalError("Multiple faces detected. Please ensure only you are present in the frame.");
-                        } else if (status === 'WRONG_FACE') {
-                          setLocalError("Identity Mismatch: The person on camera does not match the registered candidate. Please ensure the correct candidate is present.");
+                          await handleStartInterview();
                         } else {
-                          setLocalError("An unexpected error occurred during verification. Please try again.");
+                          setLoading(false);
+                          if (status === 'NO_FACE') {
+                            setLocalError("Face not detected. Please ensure you are clearly visible in the camera frame.");
+                          } else if (status === 'MULTI_FACE') {
+                            setLocalError("Multiple faces detected. Please ensure only you are present in the frame.");
+                          } else if (status === 'WRONG_FACE') {
+                            setLocalError("Identity Mismatch: The person on camera does not match the registered candidate. Please ensure the correct candidate is present.");
+                          } else {
+                            setLocalError("An unexpected error occurred during verification. Please try again.");
+                          }
                         }
                       } catch (e: any) {
-                        setLocalError(e.message || "Verification failed");
-                      } finally {
                         setLoading(false);
+                        setLocalError(e.message || "Verification failed");
                       }
                     }}
                     className="flex-1"
@@ -527,12 +565,14 @@ const InterviewSetupPage = () => {
           transition={{ duration: 0.45, ease: "easeOut" }}
           className="flex flex-col gap-6 lg:gap-[1.5vw] max-w-full"
         >
+
           <motion.div
             initial={reduceMotion ? false : { opacity: 0, y: 10 }}
             animate={reduceMotion ? undefined : { opacity: 1, y: 0 }}
             transition={{ duration: 0.4, delay: 0.02, ease: "easeOut" }}
+            className="relative z-50"
           >
-            <InputField
+            <RoleAutocomplete
               label="Desired Role"
               labelIcon={
                 <img
@@ -541,10 +581,12 @@ const InterviewSetupPage = () => {
                   className="w-[90%] object-contain"
                 />
               }
-              type="text"
-              placeholder="e.g. Front End Developer"
               value={role}
-              onChange={(e) => setRole(e.target.value)}
+              onChange={setRole}
+              onSelect={(val) => {
+                setRole(val);
+                setIsValidRole(true);
+              }}
             />
           </motion.div>
 
@@ -553,8 +595,8 @@ const InterviewSetupPage = () => {
             animate={reduceMotion ? undefined : { opacity: 1, y: 0 }}
             transition={{ duration: 0.4, delay: 0.06, ease: "easeOut" }}
           >
-            <InputField
-              label="Industry"
+            <IndustryAutocomplete
+              label="Industry / Domain"
               labelIcon={
                 <img
                   src={ImagesPath.industryIcon}
@@ -562,11 +604,13 @@ const InterviewSetupPage = () => {
                   className="w-[90%] object-contain"
                 />
               }
-              type="text"
-              placeholder="e.g. Technology"
               value={industry}
-              onChange={(e) => setIndustry(e.target.value)}
+              onChange={setIndustry}
+              onSelect={setIndustry}
             />
+            <p className="mt-2 text-[10px] text-text-secondary/70 italic px-2">
+              Note: Enter industry (e.g. Finance, Healthcare) here. Specific job titles go in the "Desired Role" field above.
+            </p>
           </motion.div>
 
           <motion.div
