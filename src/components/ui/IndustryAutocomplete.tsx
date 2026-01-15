@@ -92,15 +92,7 @@ const IndustryAutocomplete: React.FC<IndustryAutocompleteProps> = ({
                 type="text"
                 placeholder={placeholder}
                 value={value}
-                onChange={(e) => {
-                    const newVal = e.target.value;
-                    onChange(newVal);
-                    if (newVal.trim().length > 0) {
-                        setShowSuggestions(true);
-                    } else {
-                        setShowSuggestions(false);
-                    }
-                }}
+                onChange={(e) => onChange(e.target.value)}
                 onFocus={() => {
                     if (value.trim().length > 0) setShowSuggestions(true);
                 }}

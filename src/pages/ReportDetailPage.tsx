@@ -84,16 +84,8 @@ export default function ReportDetailPage() {
 
         // Normalize (do NOT hardcode data; just map possible keys)
         const answerQualityRaw = raw?.answerQuality ?? raw?.evaluation ?? raw?.feedback?.evaluation ?? raw ?? {};
-        // Locate Body Language Data (Exhaustive search)
-        const bodyLanguageRaw =
-          raw?.bodyLanguage ||
-          raw?.body_language ||
-          raw?.behavior ||
-          raw?.metrics?.body_language ||
-          raw?.feedback?.body_language ||
-          raw?.feedback?.behavior ||
-          raw?.proctoring?.behavior ||
-          {};
+        const bodyLanguageRaw = raw?.bodyLanguage ?? raw?.body_language ?? raw?.body ?? raw?.feedback?.body_language ?? {};
+        const feedbackRaw = raw?.feedback ?? {};
 
         const normalized: ReportDetail = {
           id: String(raw?._id || raw?.id || id),
@@ -103,20 +95,19 @@ export default function ReportDetailPage() {
           totalScore: safeNum(raw?.totalScore ?? raw?.marks),
           aiSummary: raw?.aiSummary || raw?.summary || raw?.finalSummary || feedbackRaw?.summary || feedbackRaw?.ai_summary || "",
           answerQuality: {
-            technicalAccuracy: safeNum(answerQualityRaw?.technicalAccuracy ?? raw?.technicalAccuracy ?? raw?.technical_accuracy),
-            completeness: safeNum(answerQualityRaw?.completeness ?? raw?.completeness ?? raw?.completeness_score),
-            conciseness: safeNum(answerQualityRaw?.conciseness ?? raw?.conciseness ?? raw?.conciseness_score),
-            problemSolving: safeNum(answerQualityRaw?.problemSolving ?? raw?.problemSolving ?? raw?.problem_solving),
+            technicalAccuracy: safeNum(answerQualityRaw?.technicalAccuracy ?? raw?.technicalAccuracy),
+            completeness: safeNum(answerQualityRaw?.completeness ?? raw?.completeness),
+            conciseness: safeNum(answerQualityRaw?.conciseness ?? raw?.conciseness),
+            problemSolving: safeNum(answerQualityRaw?.problemSolving ?? raw?.problemSolving),
           },
           bodyLanguage: {
-            // Check bodyLanguageRaw first, then fallback to top-level raw
-            eyeContact: safeNum(bodyLanguageRaw?.eyeContact ?? bodyLanguageRaw?.eye_contact ?? raw?.eyeContact ?? raw?.eye_contact ?? 0),
-            engagement: safeNum(bodyLanguageRaw?.engagement ?? bodyLanguageRaw?.engagement_score ?? raw?.engagement ?? raw?.engagement_score ?? 0),
-            attention: safeNum(bodyLanguageRaw?.attention ?? bodyLanguageRaw?.attention_score ?? raw?.attention ?? raw?.attention_score ?? 0),
-            stability: safeNum(bodyLanguageRaw?.stability ?? bodyLanguageRaw?.stability_score ?? raw?.stability ?? raw?.stability_score ?? 0),
-            dominantExpression: bodyLanguageRaw?.dominantExpression || bodyLanguageRaw?.dominantBehavior || bodyLanguageRaw?.dominant_behavior || bodyLanguageRaw?.expression || raw?.dominantExpression || raw?.dominant_expression,
-            expressionConfidence: safeNum(bodyLanguageRaw?.expressionConfidence ?? bodyLanguageRaw?.confidence ?? bodyLanguageRaw?.expression_confidence ?? raw?.expressionConfidence ?? 0),
-            overallScore: safeNum(bodyLanguageRaw?.overallScore ?? bodyLanguageRaw?.overall_score ?? bodyLanguageRaw?.score ?? raw?.bodyLanguageScore ?? raw?.body_language_score ?? 0),
+            eyeContact: safeNum(bodyLanguageRaw?.eyeContact),
+            engagement: safeNum(bodyLanguageRaw?.engagement),
+            attention: safeNum(bodyLanguageRaw?.attention),
+            stability: safeNum(bodyLanguageRaw?.stability),
+            dominantExpression: bodyLanguageRaw?.dominantExpression || bodyLanguageRaw?.dominantBehavior || bodyLanguageRaw?.dominant_behavior,
+            expressionConfidence: safeNum(bodyLanguageRaw?.expressionConfidence),
+            overallScore: safeNum(bodyLanguageRaw?.overallScore),
           },
           questions: Array.isArray(raw?.questions)
             ? raw.questions.map((q: any) => ({
@@ -134,63 +125,6 @@ export default function ReportDetailPage() {
               }))
               : [],
         };
-
-        // Fallback: If metrics are missing but session/interview ID is present, try performance endpoint
-        // Use sessionId or interviewId from report if report.id doesn't yield results
-        const sessionRefId = raw?.sessionId || raw?.interviewId || raw?.session?._id || raw?.id || normalized.id;
-
-        if (
-          normalized.bodyLanguage.eyeContact === 0 &&
-          normalized.bodyLanguage.engagement === 0 &&
-          normalized.bodyLanguage.attention === 0 &&
-          normalized.bodyLanguage.stability === 0
-        ) {
-          try {
-            console.log(`🔍 No body language in report. Fetching performance for ID: ${sessionRefId}`);
-            const perfRes = await api.get(`/api/interview/${encodeURIComponent(sessionRefId)}/performance`);
-            const pData = perfRes?.data;
-            if (pData) {
-              const pBL = pData.bodyLanguage || pData;
-              normalized.bodyLanguage = {
-                eyeContact: safeNum(pBL.eyeContact ?? pBL.eye_contact ?? normalized.bodyLanguage.eyeContact),
-                engagement: safeNum(pBL.engagement ?? pBL.engagement_score ?? normalized.bodyLanguage.engagement),
-                attention: safeNum(pBL.attention ?? pBL.attention_score ?? normalized.bodyLanguage.attention),
-                stability: safeNum(pBL.stability ?? pBL.stability_score ?? normalized.bodyLanguage.stability),
-                dominantExpression: pBL.dominantExpression || pBL.dominant_expression || normalized.bodyLanguage.dominantExpression,
-                expressionConfidence: safeNum(pBL.expressionConfidence ?? pBL.confidence ?? normalized.bodyLanguage.expressionConfidence),
-                overallScore: safeNum(pBL.overallScore ?? pBL.overall_score ?? pData.bodyLanguageScore ?? normalized.bodyLanguage.overallScore),
-              };
-            }
-          } catch (e) {
-            // Silent fail for second attempt with raw.id if sessionRefId was different
-            if (sessionRefId !== normalized.id) {
-              try {
-                const perfRes2 = await api.get(`/api/interview/${encodeURIComponent(normalized.id)}/performance`);
-                if (perfRes2?.data) {
-                  const pData = perfRes2.data;
-                  const pBL = pData.bodyLanguage || pData;
-                  normalized.bodyLanguage = {
-                    eyeContact: safeNum(pBL.eyeContact ?? pBL.eye_contact ?? normalized.bodyLanguage.eyeContact),
-                    engagement: safeNum(pBL.engagement ?? pBL.engagement_score ?? normalized.bodyLanguage.engagement),
-                    attention: safeNum(pBL.attention ?? pBL.attention_score ?? normalized.bodyLanguage.attention),
-                    stability: safeNum(pBL.stability ?? pBL.stability_score ?? normalized.bodyLanguage.stability),
-                    dominantExpression: pBL.dominantExpression || pBL.dominant_expression || normalized.bodyLanguage.dominantExpression,
-                    expressionConfidence: safeNum(pBL.expressionConfidence ?? pBL.confidence ?? normalized.bodyLanguage.expressionConfidence),
-                    overallScore: safeNum(pBL.overallScore ?? pBL.overall_score ?? pData.bodyLanguageScore ?? normalized.bodyLanguage.overallScore),
-                  };
-                }
-              } catch (e2) { }
-            }
-          }
-        }
-
-        // Calculate body language overallScore if it's still missing but we have sub-metrics
-        if (normalized.bodyLanguage.overallScore === 0) {
-          const { eyeContact, engagement, attention, stability } = normalized.bodyLanguage;
-          if (eyeContact > 0 || engagement > 0 || attention > 0 || stability > 0) {
-            normalized.bodyLanguage.overallScore = Math.round((eyeContact + engagement + attention + stability) / 4);
-          }
-        }
 
         if (mounted) setReport(normalized);
       } catch (err: any) {
