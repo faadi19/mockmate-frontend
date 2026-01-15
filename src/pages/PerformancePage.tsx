@@ -11,7 +11,7 @@ import ProgressBar from "../components/ui/ProgressBar";
 import Button from "../components/ui/Button";
 
 import { Bar, Line } from "react-chartjs-2";
-import { TrendingUp } from "lucide-react";
+import { TrendingUp, TrendingDown, ArrowUpRight, ArrowDownRight } from "lucide-react";
 import {
   Chart as ChartJS,
   CategoryScale,
@@ -743,25 +743,23 @@ const PerformancePage = () => {
                     </div>
                   ) : (
                     <div>
-                      <div className="flex justify-between mb-1">
-                        <span className="text-gray-300">
-                          Improvement vs previous {roleLabel} interview
-                        </span>
-                        <span
-                          className={
-                            summary.improvement > 0
-                              ? "text-green-400 font-semibold"
+                      <div className="flex justify-between items-center mb-2">
+                        <span className="text-gray-300 text-sm">Session Performance Delta</span>
+                        <div
+                          className={`flex items-center gap-1.5 px-2 py-1 rounded-lg text-xs font-bold border ${summary.improvement > 0
+                              ? "bg-green-500/10 text-green-400 border-green-500/20"
                               : summary.improvement < 0
-                                ? "text-red-400 font-semibold"
-                                : "text-gray-300 font-semibold"
-                          }
+                                ? "bg-red-500/10 text-red-400 border-red-500/20"
+                                : "bg-gray-500/10 text-gray-400 border-gray-500/20"
+                            }`}
                         >
-                          {summary.improvement > 0
-                            ? `+${summary.improvement}%`
-                            : summary.improvement < 0
-                              ? `${summary.improvement}%`
-                              : `0%`}
-                        </span>
+                          {summary.improvement > 0 ? (
+                            <ArrowUpRight size={14} className="stroke-[3]" />
+                          ) : summary.improvement < 0 ? (
+                            <ArrowDownRight size={14} className="stroke-[3]" />
+                          ) : null}
+                          <span>{Math.abs(summary.improvement)}%</span>
+                        </div>
                       </div>
                       <ProgressBar
                         value={Math.abs(summary.improvement)}
@@ -774,6 +772,13 @@ const PerformancePage = () => {
                               : "bg-gray-500"
                         }
                       />
+                      <p className="text-[10px] text-text-secondary mt-1 italic">
+                        {summary.improvement > 0
+                          ? "Growth compared to last interview"
+                          : summary.improvement < 0
+                            ? "Decrease in score compared to last session"
+                            : "No change from previous session"}
+                      </p>
                     </div>
                   )}
 
@@ -796,22 +801,25 @@ const PerformancePage = () => {
               <div className="flex justify-between items-center">
                 <CardTitle className="text-2xl font-semibold">Detailed Analysis</CardTitle>
 
-                <div className="flex">
-                  <Button
-                    variant={activeTab === "answer-quality" ? "default" : "ghost"}
+                <div className="flex bg-background/50 p-1 rounded-xl border border-border">
+                  <button
                     onClick={() => setActiveTab("answer-quality")}
-                    className="rounded-r-none"
+                    className={`px-4 py-2 text-xs font-bold uppercase tracking-wider rounded-lg transition-all ${activeTab === "answer-quality"
+                      ? "bg-primary text-white shadow-lg shadow-primary/20"
+                      : "text-text-secondary hover:text-text-primary hover:bg-white/5"
+                      }`}
                   >
                     Answer Quality
-                  </Button>
-
-                  <Button
-                    variant={activeTab === "body-language" ? "default" : "ghost"}
+                  </button>
+                  <button
                     onClick={() => setActiveTab("body-language")}
-                    className="rounded-l-none"
+                    className={`px-4 py-2 text-xs font-bold uppercase tracking-wider rounded-lg transition-all ${activeTab === "body-language"
+                      ? "bg-primary text-white shadow-lg shadow-primary/20"
+                      : "text-text-secondary hover:text-text-primary hover:bg-white/5"
+                      }`}
                   >
                     Body Language
-                  </Button>
+                  </button>
                 </div>
               </div>
             </CardHeader>
@@ -837,7 +845,7 @@ const PerformancePage = () => {
                   {Object.entries(summary.answerQuality).map(([key, value]: any) => (
                     <div key={key} className="mb-6">
                       <div className="flex justify-between text-gray-300 mb-1">
-                        <span>{key.replace(/^\w/, (c: string) => c.toUpperCase())}</span>
+                        <span>{key.replace(/([A-Z])/g, ' $1').replace(/^./, (str: string) => str.toUpperCase())}</span>
                         <span>{value}%</span>
                       </div>
 
@@ -877,11 +885,9 @@ const PerformancePage = () => {
                         <span className="text-gray-300">Dominant Expression</span>
                         <div className="flex items-center gap-2">
                           <span className="text-lg">
-                            {summary.bodyLanguage.dominantExpression === 'happy' && '😊'}
-                            {summary.bodyLanguage.dominantExpression === 'sad' && '😢'}
+                            {summary.bodyLanguage.dominantExpression === 'confident' && '😊'}
                             {summary.bodyLanguage.dominantExpression === 'nervous' && '😰'}
-                            {summary.bodyLanguage.dominantExpression === 'neutral' && '😐'}
-                            {summary.bodyLanguage.dominantExpression === 'shocked' && '😲'}
+                            {summary.bodyLanguage.dominantExpression === 'distracted' && '😑'}
                           </span>
                           <span className="text-primary font-semibold capitalize">
                             {summary.bodyLanguage.dominantExpression}

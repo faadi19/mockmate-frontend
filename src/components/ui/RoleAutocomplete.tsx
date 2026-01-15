@@ -58,6 +58,13 @@ const RoleAutocomplete: React.FC<RoleAutocompleteProps> = ({
         const val = e.target.value;
         onChange(val);
 
+        if (val.trim().length > 0) {
+            setShowSuggestions(true);
+        } else {
+            setShowSuggestions(false);
+            setSuggestions([]);
+        }
+
         if (debounceTimerRef.current) {
             clearTimeout(debounceTimerRef.current);
         }

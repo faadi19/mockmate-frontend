@@ -118,6 +118,13 @@ const InterviewChatPage = () => {
   const [rule3Countdown, setRule3Countdown] = useState<number | null>(null);
   const [isInterviewTerminated, setIsInterviewTerminated] = useState(false);
   const [violationType, setViolationType] = useState<string | null>(null);
+  const [sessionFinished, setSessionFinished] = useState(false);
+
+  // Phone Detection Tracking
+  const [phoneViolationCount, setPhoneViolationCount] = useState<number>(0);
+  const [phoneWarningStage, setPhoneWarningStage] = useState<0 | 1 | 2 | 3>(0);
+  const [isPhoneDetectedNow, setIsPhoneDetectedNow] = useState<boolean>(false);
+  const phoneDetectionRef = useRef<{ isActive: boolean; lastState: boolean }>({ isActive: false, lastState: false });
 
   const textareaRef = useRef<HTMLTextAreaElement>(null);
 
@@ -331,17 +338,50 @@ const InterviewChatPage = () => {
     return () => clearTimeout(timer);
   }, [multipleFacesDetected, rule3Countdown, isInterviewTerminated, terminateInterview]);
 
-  // Log cheating detection results
+  // Phone detection logic (3-stage warning)
   useEffect(() => {
-    if (cheatingResult.cheatingDetected) {
-      console.warn('⚠️ CHEATING DETECTED:', {
-        phoneDetected: cheatingResult.phoneDetected,
-        behavioralCheatingDetected: cheatingResult.behavioralCheatingDetected,
-        behaviorScore: cheatingResult.behaviorScore,
-        status: cheatingResult.status,
+    if (isInterviewTerminated) return;
+
+    const currentlyDetected = cheatingResult.phoneDetected;
+    const previouslyDetected = phoneDetectionRef.current.lastState;
+    phoneDetectionRef.current.lastState = currentlyDetected;
+
+    // Detect NEW incident (false -> true)
+    if (currentlyDetected && !previouslyDetected) {
+      setPhoneViolationCount(prev => {
+        const nextCount = prev + 1;
+
+        if (nextCount === 1) {
+          setPhoneWarningStage(1);
+          reportViolation(sessionId!, "MOBILE_PHONE_DETECTED", "First Warning Issued", captureViolationFrame());
+        } else if (nextCount === 2) {
+          setPhoneWarningStage(2);
+          reportViolation(sessionId!, "MOBILE_PHONE_DETECTED", "Final Warning + Penalty Issued (10%)", captureViolationFrame());
+          // Optional: You can send a penalty flag to the backend if an API supports it
+        } else if (nextCount >= 3) {
+          setPhoneWarningStage(3);
+          terminateInterview("PHONE_CHEATING");
+        }
+
+        return nextCount;
       });
     }
-  }, [cheatingResult]);
+
+    // Update current visibility (if phone is present, show warning)
+    setIsPhoneDetectedNow(currentlyDetected);
+
+    // If phone is removed, clear the warning visibility but KEEP the violation count
+    if (!currentlyDetected && previouslyDetected) {
+      setPhoneWarningStage(0);
+    }
+  }, [cheatingResult.phoneDetected, sessionId, isInterviewTerminated, terminateInterview, captureViolationFrame]);
+
+  // Log cheating detection results
+  useEffect(() => {
+    if (cheatingResult.phoneDetected) {
+      console.warn('⚠️ PHONE DETECTED! Count:', phoneViolationCount, 'Stage:', phoneWarningStage);
+    }
+  }, [cheatingResult.phoneDetected, phoneViolationCount, phoneWarningStage]);
 
   /* ============================================================
      AUTO-SCROLL WHEN CHAT UPDATES
@@ -439,7 +479,7 @@ const InterviewChatPage = () => {
     // Stop audio and MediaPipe if user navigates away or closes page
     const handleBeforeUnload = () => {
       console.log("🧹 beforeunload: Cleaning up MediaPipe and camera...");
-      
+
       // Stop MediaPipe
       try {
         if (typeof (window as any).stopMediaPipeAnalysis === 'function') {
@@ -478,10 +518,10 @@ const InterviewChatPage = () => {
 
     return () => {
       window.removeEventListener("beforeunload", handleBeforeUnload);
-      
+
       // Also cleanup on location change
       console.log("🧹 Location changed - cleaning up MediaPipe...");
-      
+
       // Stop MediaPipe
       try {
         if (typeof (window as any).stopMediaPipeAnalysis === 'function') {
@@ -539,14 +579,14 @@ const InterviewChatPage = () => {
     // Only cleanup when component actually unmounts (not on every render)
     // Use a ref to track if component is mounted
     let isMounted = true;
-    
+
     // Cleanup function runs when component unmounts or user navigates away
     return () => {
       if (!isMounted) return; // Already cleaned up
       isMounted = false;
-      
+
       console.log("🧹 InterviewChatPage: Component unmounting - cleaning up MediaPipe...");
-      
+
       // Stop MediaPipe analysis directly (don't set state in cleanup - causes issues)
       try {
         if (typeof (window as any).stopMediaPipeAnalysis === 'function') {
@@ -837,6 +877,17 @@ const InterviewChatPage = () => {
     // Stop sampling when user answers
     setIsSampling(false);
 
+    // CRITICAL: Force save body language data for the current question BEFORE sending answer
+    // This ensures the backend has all metrics before it evaluates the final response/session
+    if (typeof (window as any).saveBodyLanguageFinalData === 'function') {
+      try {
+        console.log("Saving body language feedback before answer...");
+        await (window as any).saveBodyLanguageFinalData();
+      } catch (err) {
+        console.error("Error saving pre-answer body language data:", err);
+      }
+    }
+
     try {
       setLoading(true);
 
@@ -854,6 +905,7 @@ const InterviewChatPage = () => {
          END SESSION → STOP AUDIO
          --------------------------- */
       if (data.done || data.sessionEnded) {
+        setSessionFinished(true); // Mark session as finished to hide violation UI
         if (currentAudioRef.current) {
           currentAudioRef.current.pause();
           currentAudioRef.current.currentTime = 0;
@@ -1037,7 +1089,7 @@ const InterviewChatPage = () => {
               {error && <p className="text-sm text-red-400 mb-2">{error}</p>}
 
               {/* Identity Verification Warnings */}
-              {mismatchCount >= 2 && mismatchCount < 6 && (
+              {mismatchCount >= 2 && mismatchCount < 6 && !sessionFinished && (
                 <div className="mb-2 p-3 bg-red-900/40 border border-red-500 rounded-lg text-red-100 text-xs font-semibold animate-pulse shadow-lg">
                   <div className="flex items-center gap-2 mb-1">
                     <svg className="w-4 h-4 text-red-400" fill="currentColor" viewBox="0 0 20 20">
@@ -1098,17 +1150,23 @@ const InterviewChatPage = () => {
               <div className="bg-card border border-border rounded-lg p-3 space-y-2 text-xs">
                 <div className="flex items-center justify-between mb-2">
                   <h3 className="text-sm font-semibold text-text-primary">Cheating Detection</h3>
-                  <div className={`px-2 py-0.5 rounded text-xs font-medium ${cheatingResult.cheatingDetected || multipleFacesDetected
-                    ? 'bg-red-500/20 text-red-500'
-                    : (noFaceDetected || cheatingResult.status === 'Distracted')
-                      ? 'bg-yellow-500/20 text-yellow-500'
-                      : 'bg-green-500/20 text-green-500'
-                    }`}>
-                    {cheatingResult.cheatingDetected || multipleFacesDetected
-                      ? 'Violation'
+                  <div className={`px-2 py-0.5 rounded text-xs font-medium ${sessionFinished
+                    ? 'bg-blue-500/20 text-blue-500'
+                    : (cheatingResult.cheatingDetected || multipleFacesDetected)
+                      ? 'bg-red-500/20 text-red-500'
                       : (noFaceDetected || cheatingResult.status === 'Distracted')
-                        ? 'Distracted'
-                        : 'Active'}
+                        ? 'bg-yellow-500/20 text-yellow-500'
+                        : 'bg-green-500/20 text-green-500'
+                    }`}>
+                    {sessionFinished
+                      ? 'Completed'
+                      : isInterviewTerminated
+                        ? 'Terminated'
+                        : (cheatingResult.cheatingDetected || multipleFacesDetected)
+                          ? 'Violation'
+                          : (noFaceDetected || cheatingResult.status === 'Distracted')
+                            ? 'Distracted'
+                            : 'Active'}
                   </div>
                 </div>
 
@@ -1116,9 +1174,14 @@ const InterviewChatPage = () => {
                   {/* Phone Detection Status */}
                   <div className="flex items-center justify-between text-gray-400">
                     <span>Phone Detection</span>
-                    <span className={cheatingResult.phoneDetected ? "text-red-500 font-bold" : "text-green-500"}>
-                      {cheatingResult.phoneDetected ? "DETECTED" : "Clear"}
-                    </span>
+                    <div className="flex flex-col items-end">
+                      <span className={cheatingResult.phoneDetected ? "text-red-500 font-bold" : "text-green-500"}>
+                        {cheatingResult.phoneDetected ? "DETECTED" : "Clear"}
+                      </span>
+                      {phoneViolationCount > 0 && (
+                        <span className="text-[10px] text-red-400">Violation: {phoneViolationCount}/3</span>
+                      )}
+                    </div>
                   </div>
 
                   {/* Behavioral Analysis */}
@@ -1255,15 +1318,63 @@ const InterviewChatPage = () => {
         </div>
       )}
 
+      {/* Mobile Phone Detection Warning - Stage 1 (Warning) */}
+      {phoneWarningStage === 1 && isPhoneDetectedNow && !isInterviewTerminated && !sessionFinished && (
+        <div className="fixed top-32 left-1/2 -translate-x-1/2 z-[100] w-[90%] max-w-lg">
+          <motion.div
+            initial={{ scale: 0.9, opacity: 0 }}
+            animate={{ scale: 1, opacity: 1 }}
+            className="bg-yellow-500 border-2 border-yellow-600 rounded-xl p-5 shadow-2xl flex items-center gap-4"
+          >
+            <div className="bg-yellow-600/20 p-2 rounded-full">
+              <AlertCircle className="text-yellow-900 size-6" />
+            </div>
+            <div className="flex-1">
+              <h3 className="text-yellow-900 font-bold text-lg">Mobile Phone Detected</h3>
+              <p className="text-yellow-800 text-sm">Please remove the mobile to continue the interview.</p>
+            </div>
+          </motion.div>
+        </div>
+      )}
+
+      {/* Mobile Phone Detection Warning - Stage 2 (Final Warning) */}
+      {phoneWarningStage === 2 && isPhoneDetectedNow && !isInterviewTerminated && !sessionFinished && (
+        <div className="fixed top-32 left-1/2 -translate-x-1/2 z-[100] w-[90%] max-w-lg">
+          <motion.div
+            initial={{ scale: 0.9, opacity: 0 }}
+            animate={{ scale: 1, opacity: 1, y: [0, -5, 0] }}
+            transition={{ y: { duration: 0.5, repeat: Infinity } }}
+            className="bg-red-600 border-2 border-red-700 rounded-xl p-5 shadow-2xl flex items-center gap-4"
+          >
+            <div className="bg-red-900/20 p-2 rounded-full">
+              <AlertCircle className="text-white size-6 animate-pulse" />
+            </div>
+            <div className="flex-1">
+              <h3 className="text-white font-bold text-lg leading-tight">Final Warning</h3>
+              <p className="text-white/90 text-sm">Repeated mobile usage may end your interview. Penalty applied.</p>
+            </div>
+            <div className="bg-white/20 px-2 py-1 rounded text-white font-bold text-xs">
+              -10%
+            </div>
+          </motion.div>
+        </div>
+      )}
+
       {/* General Termination Overlay */}
       {isInterviewTerminated && violationType !== "IDENTITY_MISMATCH" && (
-        <div className="fixed inset-0 z-[1000] bg-slate-950 flex items-center justify-center p-6">
-          <div className="text-center max-w-lg">
+        <div className="fixed inset-0 z-[1000] bg-slate-950 flex items-center justify-center p-6 text-center">
+          <div className="max-w-lg">
             <div className="size-20 bg-red-500/20 rounded-full flex items-center justify-center mx-auto mb-6 border border-red-500/30">
               <AlertCircle className="text-red-500 size-12" />
             </div>
-            <h1 className="text-white text-3xl font-black mb-4 uppercase">Session Terminated</h1>
-            <p className="text-slate-400 text-lg mb-8">{error}</p>
+            <h1 className="text-white text-3xl font-black mb-4 uppercase">
+              {violationType === "PHONE_CHEATING" ? "Interview Terminated" : "Session Terminated"}
+            </h1>
+            <p className="text-slate-400 text-lg mb-8">
+              {violationType === "PHONE_CHEATING"
+                ? "Interview terminated due to repeated policy violations."
+                : error}
+            </p>
             <div className="text-primary text-sm font-bold animate-pulse">Redirecting to dashboard...</div>
           </div>
         </div>
