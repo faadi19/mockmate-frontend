@@ -48,8 +48,8 @@ const HomePage = () => {
   ];
 
   return (
-    <div className="relative w-screen bg-background h-screen overflow-y-auto overflow-x-hidden">
-      <div className="w-screen h-screen absolute top-0 left-0">
+    <div className="relative w-screen bg-background min-h-screen overflow-y-auto overflow-x-hidden">
+      <div className="fixed inset-0 pointer-events-none">
         <img
           src={ImagesPath.mainHomePageBg}
           alt="Home Background"
