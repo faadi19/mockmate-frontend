@@ -805,8 +805,8 @@ const PerformancePage = () => {
                   <button
                     onClick={() => setActiveTab("answer-quality")}
                     className={`px-4 py-2 text-xs font-bold uppercase tracking-wider rounded-lg transition-all ${activeTab === "answer-quality"
-                      ? "bg-primary text-white shadow-lg shadow-primary/20"
-                      : "text-text-secondary hover:text-text-primary hover:bg-white/5"
+                        ? "bg-primary text-white shadow-lg shadow-primary/20"
+                        : "text-text-secondary hover:text-text-primary hover:bg-white/5"
                       }`}
                   >
                     Answer Quality
@@ -814,8 +814,8 @@ const PerformancePage = () => {
                   <button
                     onClick={() => setActiveTab("body-language")}
                     className={`px-4 py-2 text-xs font-bold uppercase tracking-wider rounded-lg transition-all ${activeTab === "body-language"
-                      ? "bg-primary text-white shadow-lg shadow-primary/20"
-                      : "text-text-secondary hover:text-text-primary hover:bg-white/5"
+                        ? "bg-primary text-white shadow-lg shadow-primary/20"
+                        : "text-text-secondary hover:text-text-primary hover:bg-white/5"
                       }`}
                   >
                     Body Language

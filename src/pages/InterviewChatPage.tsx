@@ -357,7 +357,6 @@ const InterviewChatPage = () => {
         } else if (nextCount === 2) {
           setPhoneWarningStage(2);
           reportViolation(sessionId!, "MOBILE_PHONE_DETECTED", "Final Warning + Penalty Issued (10%)", captureViolationFrame());
-          // Optional: You can send a penalty flag to the backend if an API supports it
         } else if (nextCount >= 3) {
           setPhoneWarningStage(3);
           terminateInterview("PHONE_CHEATING");
@@ -382,6 +381,18 @@ const InterviewChatPage = () => {
       console.warn('⚠️ PHONE DETECTED! Count:', phoneViolationCount, 'Stage:', phoneWarningStage);
     }
   }, [cheatingResult.phoneDetected, phoneViolationCount, phoneWarningStage]);
+
+  // Log cheating detection results
+  useEffect(() => {
+    if (cheatingResult.cheatingDetected) {
+      console.warn('⚠️ CHEATING DETECTED:', {
+        phoneDetected: cheatingResult.phoneDetected,
+        behavioralCheatingDetected: cheatingResult.behavioralCheatingDetected,
+        behaviorScore: cheatingResult.behaviorScore,
+        status: cheatingResult.status,
+      });
+    }
+  }, [cheatingResult]);
 
   /* ============================================================
      AUTO-SCROLL WHEN CHAT UPDATES
@@ -878,7 +889,6 @@ const InterviewChatPage = () => {
     setIsSampling(false);
 
     // CRITICAL: Force save body language data for the current question BEFORE sending answer
-    // This ensures the backend has all metrics before it evaluates the final response/session
     if (typeof (window as any).saveBodyLanguageFinalData === 'function') {
       try {
         console.log("Saving body language feedback before answer...");
