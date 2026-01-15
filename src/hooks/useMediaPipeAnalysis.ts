@@ -469,19 +469,34 @@ export function useMediaPipeAnalysis(
   }, [enabled, configureWasmModule]);
 
   /**
+   * Check if MediaPipe is actually running (not just marked as initialized)
+   */
+  const isMediaPipeActuallyRunning = useCallback((): boolean => {
+    return !!(
+      faceMeshRef.current &&
+      handsRef.current &&
+      cameraRef.current &&
+      videoRef.current
+    );
+  }, []);
+
+  /**
    * Wait for MediaPipe scripts to load from CDN
    * CRITICAL: This function ensures scripts are loaded before initialization
    */
   const waitForMediaPipe = useCallback((): Promise<void> => {
     return new Promise((resolve, reject) => {
+      console.log("⏳ Waiting for MediaPipe scripts to load...");
+      
       // Runtime check: Verify MediaPipe is available on window
       const checkMediaPipe = () => {
-        return (
-          typeof window !== 'undefined' &&
-          window.FaceMesh &&
-          window.Hands &&
-          window.Camera
-        );
+        const hasFaceMesh = typeof window !== 'undefined' && !!window.FaceMesh;
+        const hasHands = typeof window !== 'undefined' && !!window.Hands;
+        const hasCamera = typeof window !== 'undefined' && !!window.Camera;
+        
+        console.log(`🔍 MediaPipe check: FaceMesh=${hasFaceMesh}, Hands=${hasHands}, Camera=${hasCamera}`);
+        
+        return hasFaceMesh && hasHands && hasCamera;
       };
 
       // Check if already loaded (immediate check)
@@ -499,10 +514,21 @@ export function useMediaPipeAnalysis(
         return;
       }
 
+      // Check for load errors
+      if ((window as any).mediaPipeLoadErrors) {
+        console.warn("⚠️ MediaPipe load errors detected:", (window as any).mediaPipeLoadErrors);
+      }
+
       // Wait for scripts to load (check every 100ms, max 20 seconds)
       const maxWait = 20000;
       const startTime = Date.now();
+      let checkCount = 0;
       const checkInterval = setInterval(() => {
+        checkCount++;
+        if (checkCount % 10 === 0) {
+          console.log(`⏳ Still waiting for MediaPipe... (${Math.round((Date.now() - startTime) / 1000)}s)`);
+        }
+        
         if (checkMediaPipe()) {
           clearInterval(checkInterval);
           console.log('✅ MediaPipe scripts loaded after wait');
@@ -515,10 +541,11 @@ export function useMediaPipeAnalysis(
           if (!window.FaceMesh) missing.push('FaceMesh');
           if (!window.Hands) missing.push('Hands');
           if (!window.Camera) missing.push('Camera');
-          reject(new Error(
-            `MediaPipe scripts failed to load after ${maxWait}ms. Missing: ${missing.join(', ')}. ` +
-            `Please check: 1) CDN scripts in index.html, 2) Network connectivity, 3) Browser console for script errors.`
-          ));
+          const errorMsg = `MediaPipe scripts failed to load after ${maxWait}ms. Missing: ${missing.join(', ')}. ` +
+            `Please check: 1) CDN scripts in index.html, 2) Network connectivity, 3) Browser console for script errors. ` +
+            `If scripts are blocked, try refreshing the page.`;
+          console.error("❌", errorMsg);
+          reject(new Error(errorMsg));
         }
       }, 100); // Check more frequently (every 100ms)
     });
@@ -544,9 +571,20 @@ export function useMediaPipeAnalysis(
     }
 
     // Guard 3: Global guard for React StrictMode double-mount
+    // BUT: If we're trying to start and guard is active, it might be stale - reset it
     if (globalInitializationGuard) {
-      console.log("⏸️ MediaPipe global guard active, skipping...");
-      return;
+      console.log("⚠️ MediaPipe global guard active - checking if stale...");
+      // Check if MediaPipe instances actually exist
+      if (!faceMeshRef.current && !handsRef.current && !cameraRef.current) {
+        console.log("🔄 Global guard is stale (no instances exist) - resetting...");
+        globalInitializationGuard = false;
+        initializationGuardRef.current = false;
+        isInitializingRef.current = false;
+        // Continue with initialization
+      } else {
+        console.log("⏸️ MediaPipe global guard active (instances exist), skipping...");
+        return;
+      }
     }
 
     try {
@@ -662,14 +700,17 @@ export function useMediaPipeAnalysis(
    * CRITICAL: Proper cleanup prevents memory leaks and allows re-initialization
    */
   const stopAnalysis = useCallback(() => {
+    console.log("🛑 stopAnalysis called - starting cleanup...");
+    
     // Stop camera FIRST (MediaPipe Camera.stop may not stop all underlying MediaStream tracks)
     if (cameraRef.current) {
       try {
         if (typeof cameraRef.current.stop === 'function') {
           cameraRef.current.stop();
+          console.log("✅ MediaPipe Camera.stop() called");
         }
       } catch (err) {
-        // Ignore errors during cleanup
+        console.warn("Error stopping MediaPipe camera:", err);
       }
       cameraRef.current = null;
     }
@@ -677,7 +718,7 @@ export function useMediaPipeAnalysis(
     // Additionally, explicitly stop any MediaStream tracks attached to the video element
     if (videoRef.current) {
       try {
-        // Pause and stop tracks if present
+        // Pause video first
         try {
           videoRef.current.pause();
         } catch (_) { }
@@ -685,34 +726,69 @@ export function useMediaPipeAnalysis(
         const src: any = videoRef.current.srcObject || (videoRef.current as any).mozSrcObject;
         if (src && typeof src.getTracks === 'function') {
           try {
-            src.getTracks().forEach((t: MediaStreamTrack) => {
+            const tracks = src.getTracks();
+            tracks.forEach((t: MediaStreamTrack) => {
               try {
                 t.stop();
-              } catch (_) { }
+                console.log(`✅ Stopped MediaStream track: ${t.kind} (${t.label})`);
+              } catch (err) {
+                console.warn(`Error stopping track ${t.kind}:`, err);
+              }
             });
-          } catch (_) { }
+          } catch (err) {
+            console.warn("Error getting tracks:", err);
+          }
         }
 
-        // Remove element from DOM
-        if (videoRef.current.parentNode) {
-          videoRef.current.parentNode.removeChild(videoRef.current);
-        }
         // Clear srcObject to release camera
         try {
           (videoRef.current as any).srcObject = null;
+          (videoRef.current as any).mozSrcObject = null;
         } catch (_) { }
+
+        // Remove element from DOM
+        if (videoRef.current.parentNode) {
+          try {
+            videoRef.current.parentNode.removeChild(videoRef.current);
+            console.log("✅ Removed video element from DOM");
+          } catch (err) {
+            console.warn("Error removing video element:", err);
+          }
+        }
       } catch (err) {
-        // Ignore errors during cleanup
+        console.warn("Error cleaning up video element:", err);
       }
       videoRef.current = null;
+    }
+
+    // CRITICAL: Stop ALL MediaStream tracks in the document (fallback cleanup)
+    try {
+      const allVideos = document.querySelectorAll('video');
+      allVideos.forEach((video) => {
+        try {
+          const stream: any = (video as HTMLVideoElement).srcObject;
+          if (stream && typeof stream.getTracks === 'function') {
+            stream.getTracks().forEach((track: MediaStreamTrack) => {
+              try {
+                track.stop();
+                console.log(`✅ Stopped additional MediaStream track: ${track.kind}`);
+              } catch (_) { }
+            });
+          }
+          (video as HTMLVideoElement).srcObject = null;
+        } catch (_) { }
+      });
+    } catch (err) {
+      console.warn("Error in fallback MediaStream cleanup:", err);
     }
 
     // Close MediaPipe instances
     if (faceMeshRef.current) {
       try {
         faceMeshRef.current.close();
+        console.log("✅ FaceMesh instance closed");
       } catch (err) {
-        // Ignore errors during cleanup
+        console.warn("Error closing FaceMesh:", err);
       }
       faceMeshRef.current = null;
     }
@@ -720,15 +796,16 @@ export function useMediaPipeAnalysis(
     if (handsRef.current) {
       try {
         handsRef.current.close();
+        console.log("✅ Hands instance closed");
       } catch (err) {
-        // Ignore errors during cleanup
+        console.warn("Error closing Hands:", err);
       }
       handsRef.current = null;
     }
 
     // Reset all guards and state
     initializationGuardRef.current = false;
-    globalInitializationGuard = false;
+    globalInitializationGuard = false; // CRITICAL: Reset global guard to allow re-initialization
     isInitializingRef.current = false;
     setIsInitialized(false);
     setScores({
@@ -756,16 +833,52 @@ export function useMediaPipeAnalysis(
     previousHandPositionsRef.current = [];
     currentHandLandmarksRef.current = [];
 
-    console.log("🛑 MediaPipe analysis stopped and cleaned up");
+    console.log("✅ MediaPipe analysis stopped and cleaned up completely");
   }, []);
 
   // Auto-start when enabled
   // CRITICAL: useEffect with proper cleanup for React StrictMode
   useEffect(() => {
-    // Only start if enabled and not already initialized
-    if (enabled && !isInitialized && !initializationGuardRef.current) {
-      startAnalysis();
-    } else if (!enabled && isInitialized) {
+    const actuallyRunning = isMediaPipeActuallyRunning();
+    console.log(`🔄 MediaPipe useEffect: enabled=${enabled}, isInitialized=${isInitialized}, guard=${initializationGuardRef.current}, globalGuard=${globalInitializationGuard}, actuallyRunning=${actuallyRunning}`);
+    
+    // If enabled and not initialized, try to start
+    if (enabled) {
+      // Check if MediaPipe is actually running but state is inconsistent
+      if (actuallyRunning && !isInitialized) {
+        console.log("⚠️ MediaPipe instances exist but state says not initialized - syncing state...");
+        setIsInitialized(true);
+        initializationGuardRef.current = true;
+        return;
+      }
+      
+      // Check if we need to start (not initialized and guards are clear)
+      if (!isInitialized && !initializationGuardRef.current && !globalInitializationGuard) {
+        console.log("▶️ Starting MediaPipe analysis...");
+        startAnalysis();
+      } else if (!isInitialized && (initializationGuardRef.current || globalInitializationGuard)) {
+        // Guards are blocking - check if they're stale
+        if (!actuallyRunning) {
+          // Guards are stale - reset them and try again
+          console.log("⚠️ Guards blocking initialization but no instances exist - resetting and retrying...");
+          initializationGuardRef.current = false;
+          globalInitializationGuard = false;
+          isInitializingRef.current = false;
+          setIsInitialized(false);
+          // Wait a bit then retry
+          setTimeout(() => {
+            if (enabled && !isInitialized && !isMediaPipeActuallyRunning()) {
+              console.log("🔄 Retrying MediaPipe initialization after guard reset...");
+              startAnalysis();
+            }
+          }, 500);
+        } else {
+          console.log("⏸️ Guards active but MediaPipe is running - state is correct");
+        }
+      }
+    } else if (!enabled && (isInitialized || actuallyRunning)) {
+      // Disabled and initialized/running - stop it
+      console.log("⏹️ Stopping MediaPipe analysis (enabled=false)...");
       stopAnalysis();
     }
 
@@ -773,10 +886,11 @@ export function useMediaPipeAnalysis(
     return () => {
       // Only cleanup if we're actually stopping (not just React StrictMode remount)
       if (!enabled) {
+        console.log("🧹 useEffect cleanup: stopping MediaPipe...");
         stopAnalysis();
       }
     };
-    // NOTE: Intentionally NOT including startAnalysis/stopAnalysis in deps
+    // NOTE: Intentionally NOT including startAnalysis/stopAnalysis/isMediaPipeActuallyRunning in deps
     // to prevent unnecessary re-runs. The guards handle re-initialization.
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [enabled, isInitialized]);

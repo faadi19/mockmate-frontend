@@ -63,7 +63,22 @@ export default function MediaPipeScoresDisplay({
         delete (window as any).stopMediaPipeAnalysis;
       }
     };
-  }, [sessionId, saveFinalData]);
+  }, [sessionId, saveFinalData, stopAnalysis]);
+
+  // CRITICAL: Cleanup MediaPipe when component unmounts or enabled becomes false
+  useEffect(() => {
+    return () => {
+      // Always cleanup when component unmounts, regardless of enabled state
+      console.log("🧹 MediaPipeScoresDisplay: Cleaning up MediaPipe analysis...");
+      if (stopAnalysis) {
+        try {
+          stopAnalysis();
+        } catch (err) {
+          console.error("Error during MediaPipe cleanup:", err);
+        }
+      }
+    };
+  }, [stopAnalysis]);
 
   // Scores are already logged to console by the hook
   // This component just provides optional UI display

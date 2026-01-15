@@ -214,6 +214,44 @@ const InterviewChatPage = () => {
 
     setError(message);
 
+    // CRITICAL: Stop MediaPipe and camera immediately when violation occurs
+    console.log("🛑 Violation detected - stopping MediaPipe analysis...");
+    setMediaPipeEnabled(false);
+    setCheatingDetectionEnabled(false);
+    setIsSampling(false);
+
+    // Call stopAnalysis if available
+    try {
+      if (typeof (window as any).stopMediaPipeAnalysis === 'function') {
+        (window as any).stopMediaPipeAnalysis();
+        console.log('✅ Called window.stopMediaPipeAnalysis() from terminateInterview');
+      }
+    } catch (err) {
+      console.error("Error stopping MediaPipe analysis:", err);
+    }
+
+    // Fallback: explicitly stop all MediaStream tracks
+    try {
+      const videos = document.querySelectorAll('video');
+      videos.forEach((v) => {
+        try {
+          (v as HTMLVideoElement).pause();
+          const srcObj: any = (v as any).srcObject;
+          if (srcObj && typeof srcObj.getTracks === 'function') {
+            srcObj.getTracks().forEach((t: MediaStreamTrack) => {
+              try {
+                t.stop();
+                console.log(`✅ Stopped track ${t.kind} during violation cleanup`);
+              } catch (_) { }
+            });
+          }
+          (v as any).srcObject = null;
+        } catch (_) { }
+      });
+    } catch (err) {
+      console.error('Error stopping video tracks during violation:', err);
+    }
+
     // Capture screenshot for identity mismatch or other critical violations
     const screenshot = type === "IDENTITY_MISMATCH" ? captureViolationFrame() : undefined;
 
@@ -395,11 +433,41 @@ const InterviewChatPage = () => {
   }, []);
 
   /* ============================================================
-     STOP AUDIO ON LOCATION CHANGE (NAVIGATION)
+     STOP AUDIO AND MEDIAPIPE ON LOCATION CHANGE (NAVIGATION)
      ============================================================ */
   useEffect(() => {
-    // Stop audio if user navigates away
+    // Stop audio and MediaPipe if user navigates away or closes page
     const handleBeforeUnload = () => {
+      console.log("🧹 beforeunload: Cleaning up MediaPipe and camera...");
+      
+      // Stop MediaPipe
+      try {
+        if (typeof (window as any).stopMediaPipeAnalysis === 'function') {
+          (window as any).stopMediaPipeAnalysis();
+        }
+      } catch (err) {
+        console.error("Error stopping MediaPipe on beforeunload:", err);
+      }
+
+      // Stop all MediaStream tracks
+      try {
+        const videos = document.querySelectorAll('video');
+        videos.forEach((v) => {
+          try {
+            const srcObj: any = (v as any).srcObject;
+            if (srcObj && typeof srcObj.getTracks === 'function') {
+              srcObj.getTracks().forEach((t: MediaStreamTrack) => {
+                try { t.stop(); } catch (_) { }
+              });
+            }
+            (v as any).srcObject = null;
+          } catch (_) { }
+        });
+      } catch (err) {
+        console.error('Error stopping video tracks on beforeunload:', err);
+      }
+
+      // Stop audio
       if (currentAudioRef.current) {
         currentAudioRef.current.pause();
         currentAudioRef.current.currentTime = 0;
@@ -410,6 +478,38 @@ const InterviewChatPage = () => {
 
     return () => {
       window.removeEventListener("beforeunload", handleBeforeUnload);
+      
+      // Also cleanup on location change
+      console.log("🧹 Location changed - cleaning up MediaPipe...");
+      
+      // Stop MediaPipe
+      try {
+        if (typeof (window as any).stopMediaPipeAnalysis === 'function') {
+          (window as any).stopMediaPipeAnalysis();
+        }
+      } catch (err) {
+        console.error("Error stopping MediaPipe on location change:", err);
+      }
+
+      // Stop all MediaStream tracks
+      try {
+        const videos = document.querySelectorAll('video');
+        videos.forEach((v) => {
+          try {
+            const srcObj: any = (v as any).srcObject;
+            if (srcObj && typeof srcObj.getTracks === 'function') {
+              srcObj.getTracks().forEach((t: MediaStreamTrack) => {
+                try { t.stop(); } catch (_) { }
+              });
+            }
+            (v as any).srcObject = null;
+          } catch (_) { }
+        });
+      } catch (err) {
+        console.error('Error stopping video tracks on location change:', err);
+      }
+
+      // Stop audio
       if (currentAudioRef.current) {
         currentAudioRef.current.pause();
         currentAudioRef.current.currentTime = 0;
@@ -431,6 +531,71 @@ const InterviewChatPage = () => {
       return;
     }
   }, [location, navigate]);
+
+  /* ============================================================
+     CRITICAL: CLEANUP MEDIAPIPE AND CAMERA ON COMPONENT UNMOUNT
+     ============================================================ */
+  useEffect(() => {
+    // Only cleanup when component actually unmounts (not on every render)
+    // Use a ref to track if component is mounted
+    let isMounted = true;
+    
+    // Cleanup function runs when component unmounts or user navigates away
+    return () => {
+      if (!isMounted) return; // Already cleaned up
+      isMounted = false;
+      
+      console.log("🧹 InterviewChatPage: Component unmounting - cleaning up MediaPipe...");
+      
+      // Stop MediaPipe analysis directly (don't set state in cleanup - causes issues)
+      try {
+        if (typeof (window as any).stopMediaPipeAnalysis === 'function') {
+          (window as any).stopMediaPipeAnalysis();
+          console.log('✅ Called window.stopMediaPipeAnalysis() on unmount');
+        }
+      } catch (err) {
+        console.error("Error stopping MediaPipe on unmount:", err);
+      }
+
+      // Stop all MediaStream tracks (comprehensive cleanup)
+      try {
+        const videos = document.querySelectorAll('video');
+        videos.forEach((v) => {
+          try {
+            (v as HTMLVideoElement).pause();
+            const srcObj: any = (v as any).srcObject;
+            if (srcObj && typeof srcObj.getTracks === 'function') {
+              srcObj.getTracks().forEach((t: MediaStreamTrack) => {
+                try {
+                  t.stop();
+                  console.log(`✅ Stopped track ${t.kind} on unmount`);
+                } catch (_) { }
+              });
+            }
+            (v as any).srcObject = null;
+          } catch (_) { }
+        });
+      } catch (err) {
+        console.error('Error stopping video tracks on unmount:', err);
+      }
+
+      // Stop audio
+      if (currentAudioRef.current) {
+        currentAudioRef.current.pause();
+        currentAudioRef.current.currentTime = 0;
+        if (currentAudioRef.current.src) {
+          URL.revokeObjectURL(currentAudioRef.current.src);
+        }
+        currentAudioRef.current = null;
+      }
+
+      // Clear TTS timeout
+      if (ttsTimeoutRef.current) {
+        clearTimeout(ttsTimeoutRef.current);
+        ttsTimeoutRef.current = null;
+      }
+    };
+  }, []);
 
   /* ============================================================
      LOAD INTERVIEW SESSION FROM BACKEND
@@ -504,6 +669,9 @@ const InterviewChatPage = () => {
         setChat(initialChat);
         localStorage.setItem(`interviewChat_${data.sessionId || sessionIdToLoad}`, JSON.stringify(initialChat));
         setIsSampling(true);
+        // Ensure MediaPipe is enabled when session loads
+        setMediaPipeEnabled(true);
+        setCheatingDetectionEnabled(true);
       }
     } catch (err: any) {
       console.error("Error loading interview session:", err);
@@ -590,6 +758,10 @@ const InterviewChatPage = () => {
               }
             }
 
+            // Ensure MediaPipe is enabled when restoring session
+            setMediaPipeEnabled(true);
+            setCheatingDetectionEnabled(true);
+
             setSessionLoading(false);
             return; // ⭐ DO NOT START INTERVIEW AGAIN
           }
@@ -623,6 +795,9 @@ const InterviewChatPage = () => {
           setCurrentQuestionIndex(firstQuestionIndex);
           // TTS will be handled by useEffect watching chat array
           setIsSampling(true);
+          // Ensure MediaPipe is enabled when interview starts
+          setMediaPipeEnabled(true);
+          setCheatingDetectionEnabled(true);
         }
       } catch (err: any) {
         setError(err.message);
@@ -914,7 +1089,7 @@ const InterviewChatPage = () => {
           {!sessionLoading && sessionId && (
             <div className="lg:w-80 lg:border-l lg:border-gray-800 lg:pl-4 lg:pr-4 lg:pt-4 lg:pb-4 w-full pt-4 space-y-4">
               <MediaPipeScoresDisplay
-                enabled={mediaPipeEnabled}
+                enabled={mediaPipeEnabled && !isInterviewTerminated}
                 showUI={true}
                 sessionId={sessionId || undefined}
                 isSampling={isSampling}
